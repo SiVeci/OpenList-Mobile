@@ -97,7 +97,7 @@ const ActionSheet: React.FC<Props> = ({ file, path, config, onClose, onRefresh }
         {/* Backdrop */}
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
         
-        {/* Sheet Content - Added pb-safe */}
+        {/* Sheet Content */}
         <div className="relative w-full max-w-lg bg-white rounded-t-3xl shadow-2xl p-6 animate-slide-up pb-safe flex flex-col">
           <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 shrink-0" />
           
@@ -161,11 +161,11 @@ const ActionSheet: React.FC<Props> = ({ file, path, config, onClose, onRefresh }
                   </button>
                 ) : isVideo ? (
                   <button 
-                    onClick={() => handleExternalPlayer('vlc')}
+                    onClick={() => handleExternalPlayer('nplayer')}
                     className="flex flex-col items-center justify-center p-4 bg-indigo-600 text-white rounded-2xl gap-2 hover:bg-indigo-700 transition-colors col-span-2 shadow-lg shadow-indigo-100"
                   >
-                    <Play className="w-6 h-6" />
-                    <span className="text-sm font-semibold">Play in VLC</span>
+                    <Maximize className="w-6 h-6" />
+                    <span className="text-sm font-semibold">Play in NPlayer</span>
                   </button>
                 ) : null}
 
@@ -198,11 +198,11 @@ const ActionSheet: React.FC<Props> = ({ file, path, config, onClose, onRefresh }
                       <span className="text-sm font-semibold">MX Player</span>
                     </button>
                     <button 
-                      onClick={() => handleExternalPlayer('nplayer')}
+                      onClick={() => handleExternalPlayer('vlc')}
                       className="flex flex-col items-center justify-center p-4 bg-teal-50 text-teal-700 rounded-2xl gap-2 hover:bg-teal-100 transition-colors"
                     >
-                      <Maximize className="w-6 h-6" />
-                      <span className="text-sm font-semibold">NPlayer</span>
+                      <Play className="w-6 h-6" />
+                      <span className="text-sm font-semibold">VLC</span>
                     </button>
                   </>
                 )}
@@ -240,6 +240,7 @@ const ActionSheet: React.FC<Props> = ({ file, path, config, onClose, onRefresh }
         <PreviewModal 
           file={file} 
           url={rawUrl} 
+          config={config}
           type={isImage ? 'image' : isPdf ? 'pdf' : 'text'} 
           onClose={() => setShowPreview(false)} 
         />

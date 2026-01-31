@@ -66,8 +66,11 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     setPath('/' + parts.join('/'));
   }, [path]);
 
-  // Gesture handling
+  // Enhanced Gesture handling
   const handleTouchStart = (e: React.TouchEvent) => {
+    // Only track single touches for the back gesture
+    if (e.touches.length !== 1) return;
+    
     touchStartPos.current = { 
       x: e.touches[0].clientX, 
       y: e.touches[0].clientY 
@@ -76,22 +79,23 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
+    if (e.changedTouches.length !== 1) return;
+
     const deltaX = e.changedTouches[0].clientX - touchStartPos.current.x;
     const deltaY = e.changedTouches[0].clientY - touchStartPos.current.y;
     const duration = Date.now() - touchStartTime.current;
 
-    // Thresholds for a valid "back" swipe
-    // 1. Swipe must be from left to right (deltaX > 0)
-    // 2. Minimum distance: 80px
-    // 3. Maximum vertical deviation: 60px (to distinguish from scrolling)
-    // 4. Maximum duration: 400ms (to distinguish from slow dragging)
-    // 5. Start position: Avoid very edge (0-20px) if we want to let system handle it, 
-    //    BUT user asked to avoid exiting, so we handle it if it starts slightly inward or if we want to "take over".
-    //    Let's check if start X was between 0 and 100px from left edge.
-    const isHorizontal = Math.abs(deltaX) > Math.abs(deltaY) * 1.5;
-    const startedNearEdge = touchStartPos.current.x < 120; 
+    // Detection logic:
+    // 1. Starts from the far left edge (within 40px)
+    // 2. Swipes significantly to the right (at least 100px)
+    // 3. Movement is mostly horizontal (X distance is at least 2x the Y distance)
+    // 4. Action is relatively quick (under 500ms)
+    const isFromEdge = touchStartPos.current.x < 40; 
+    const isRightwardSwipe = deltaX > 100;
+    const isMainlyHorizontal = Math.abs(deltaX) > Math.abs(deltaY) * 2;
+    const isQuickEnough = duration < 500;
 
-    if (startedNearEdge && deltaX > 80 && Math.abs(deltaY) < 60 && duration < 400 && isHorizontal) {
+    if (isFromEdge && isRightwardSwipe && isMainlyHorizontal && isQuickEnough) {
       goBack();
     }
   };
@@ -136,6 +140,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   return (
     <div 
       className="h-full flex flex-col bg-[#f7f2fa] relative overflow-hidden"
+      style={{ touchAction: 'pan-y' }} // Tell browser we handle horizontal swipes (like back gesture)
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
@@ -153,7 +158,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
         </div>
         <button 
           onClick={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}
-          className="p-2 bg-gray-100 rounded-xl text-gray-600 hover:bg-gray-200"
+          className="p-2 bg-gray-100 rounded-xl text-gray-600 hover:bg-gray-200 active:scale-95 transition-transform"
         >
           {viewMode === 'list' ? <LayoutGrid className="w-5 h-5" /> : <List className="w-5 h-5" />}
         </button>
@@ -184,8 +189,8 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       {errorMsg && (
         <div className="mx-4 mt-2 p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-100 flex items-center gap-2 shadow-sm animate-pulse z-10">
           <AlertCircle className="w-4 h-4 shrink-0" />
-          <p>{errorMsg}</p>
-          <button onClick={() => setErrorMsg(null)} className="ml-auto font-bold opacity-50 hover:opacity-100">✕</button>
+          <p className="flex-1">{errorMsg}</p>
+          <button onClick={() => setErrorMsg(null)} className="p-1 font-bold opacity-50 hover:opacity-100">✕</button>
         </div>
       )}
 
@@ -194,11 +199,11 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
         {loading ? (
           <div className="h-40 flex flex-col items-center justify-center gap-2">
             <RefreshCw className="w-6 h-6 text-indigo-600 animate-spin" />
-            <span className="text-sm text-gray-500">Scanning storage...</span>
+            <span className="text-sm text-gray-500 font-medium">Scanning storage...</span>
           </div>
         ) : filteredFiles.length === 0 ? (
           <div className="h-40 flex flex-col items-center justify-center text-gray-400">
-            <p className="text-sm">Empty folder</p>
+            <p className="text-sm">No files found</p>
           </div>
         ) : (
           <div className={viewMode === 'list' ? 'flex flex-col gap-1' : 'grid grid-cols-3 sm:grid-cols-4 gap-4'}>
@@ -207,23 +212,29 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                 key={file.name}
                 onClick={() => file.is_dir ? handleNavigate((path === '/' ? '' : path) + '/' + file.name) : setSelectedFile({ file, path: (path === '/' ? '' : path) + '/' + file.name })}
                 className={`
-                  relative group transition-all active:scale-[0.97]
+                  relative group transition-all active:scale-[0.97] overflow-hidden
                   ${viewMode === 'list' 
                     ? 'flex items-center gap-4 p-3 bg-white rounded-2xl border border-transparent active:border-indigo-100 hover:bg-indigo-50/30' 
                     : 'flex flex-col items-center p-3 bg-white rounded-2xl border border-transparent shadow-sm'
                   }
                 `}
               >
-                <div className={`${viewMode === 'list' ? 'shrink-0' : 'w-full aspect-square flex items-center justify-center mb-2'}`}>
+                <div className={`${viewMode === 'list' ? 'shrink-0' : 'w-full aspect-square flex items-center justify-center mb-2 shrink-0'}`}>
                   {file.thumb ? (
-                     <img src={file.thumb} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                     <img src={file.thumb} alt="" className="w-10 h-10 rounded-lg object-cover shadow-sm" />
                   ) : (
                     <FileIcon isDir={file.is_dir} name={file.name} className={viewMode === 'list' ? 'w-8 h-8' : 'w-12 h-12'} />
                   )}
                 </div>
                 
-                <div className={`flex-1 min-w-0 ${viewMode === 'grid' ? 'text-center' : ''}`}>
-                  <h3 className={`font-medium text-gray-800 truncate ${viewMode === 'list' ? 'text-sm' : 'text-xs w-full px-1'}`}>
+                <div className={`min-w-0 ${viewMode === 'grid' ? 'w-full text-center' : 'flex-1'}`}>
+                  <h3 className={`
+                    font-medium text-gray-800 break-words
+                    ${viewMode === 'list' 
+                      ? 'text-sm truncate' 
+                      : 'text-[11px] leading-tight line-clamp-2 h-7 overflow-hidden px-1'
+                    }
+                  `}>
                     {file.name}
                   </h3>
                   {viewMode === 'list' && (
@@ -240,7 +251,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                       e.stopPropagation();
                       setSelectedFile({ file, path: (path === '/' ? '' : path) + '/' + file.name });
                     }}
-                    className="p-2 hover:bg-gray-100 rounded-full text-gray-400"
+                    className="p-2 hover:bg-gray-100 rounded-full text-gray-400 shrink-0"
                    >
                      <MoreVertical className="w-5 h-5" />
                    </button>
@@ -252,22 +263,22 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       </div>
 
       {/* FAB Container */}
-      <div className="fixed bottom-6 right-6 flex flex-col gap-4 z-30">
+      <div className="fixed bottom-6 right-6 flex flex-col gap-4 z-30 pb-safe">
         <button 
           onClick={handleUploadClick}
           disabled={uploading}
-          className="w-14 h-14 bg-indigo-600 text-white rounded-2xl shadow-xl flex items-center justify-center active:scale-95 transition-all disabled:opacity-50"
+          className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-xl flex items-center justify-center active:scale-90 transition-all disabled:opacity-50"
         >
           {uploading ? <RefreshCw className="w-6 h-6 animate-spin" /> : <Plus className="w-8 h-8" />}
         </button>
         <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
       </div>
 
-      {/* Back Button */}
+      {/* Back Button (Visual Fallback) */}
       {path !== '/' && (
         <button 
           onClick={goBack}
-          className="fixed bottom-6 left-6 w-12 h-12 bg-white text-indigo-600 rounded-full shadow-lg border border-indigo-50 flex items-center justify-center active:scale-90 transition-all z-30"
+          className="fixed bottom-6 left-6 w-12 h-12 bg-white text-indigo-600 rounded-full shadow-lg border border-indigo-50 flex items-center justify-center active:scale-90 transition-all z-30 mb-safe ml-safe"
         >
           <ArrowLeft className="w-6 h-6" />
         </button>
@@ -275,8 +286,8 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
 
       {/* Status Overlay */}
       {uploading && (
-        <div className="fixed bottom-24 right-6 bg-indigo-600 text-white px-4 py-2 rounded-xl shadow-lg flex items-center gap-3 z-40">
-          <Upload className="w-4 h-4 animate-bounce" />
+        <div className="fixed bottom-24 right-6 bg-indigo-600 text-white px-4 py-2 rounded-xl shadow-lg flex items-center gap-3 z-40 mb-safe animate-bounce">
+          <Upload className="w-4 h-4" />
           <span className="text-xs font-semibold">Uploading...</span>
         </div>
       )}
