@@ -1,0 +1,8 @@
+{
+  "name": "OpenList Mobile",
+  "description": "A mobile-optimized AList client for managing cloud storage, streaming media, and file operations with a Material Design 3 interface.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
