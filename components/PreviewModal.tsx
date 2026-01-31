@@ -61,23 +61,25 @@ const PreviewModal: React.FC<Props> = ({ file, url, type, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-white animate-fade-in">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-white sticky top-0 z-10 shadow-sm">
-        <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-          <X className="w-6 h-6 text-gray-600" />
-        </button>
-        <div className="flex-1 min-w-0 px-4 text-center">
-          <h2 className="text-sm font-semibold text-gray-800 truncate">{file.name}</h2>
-        </div>
-        <div className="flex items-center gap-1">
-          <a 
-            href={url} 
-            download={file.name}
-            className="p-2 hover:bg-indigo-50 text-indigo-600 rounded-full transition-colors"
-            title="Download"
-          >
-            <Download className="w-5 h-5" />
-          </a>
+      {/* Header - Added pt-safe */}
+      <header className="flex flex-col border-b border-gray-100 bg-white sticky top-0 z-10 shadow-sm pt-safe">
+        <div className="flex items-center justify-between px-4 py-3">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+            <X className="w-6 h-6 text-gray-600" />
+          </button>
+          <div className="flex-1 min-w-0 px-4 text-center">
+            <h2 className="text-sm font-semibold text-gray-800 truncate">{file.name}</h2>
+          </div>
+          <div className="flex items-center gap-1">
+            <a 
+              href={url} 
+              download={file.name}
+              className="p-2 hover:bg-indigo-50 text-indigo-600 rounded-full transition-colors"
+              title="Download"
+            >
+              <Download className="w-5 h-5" />
+            </a>
+          </div>
         </div>
       </header>
 

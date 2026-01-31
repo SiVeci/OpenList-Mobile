@@ -4,7 +4,7 @@ import { ServerConfig, AListFile } from './types';
 import { AListService } from './services/alistService';
 import FileBrowser from './components/FileBrowser';
 import Login from './components/Login';
-import { LogOut, RefreshCw, Smartphone } from 'lucide-react';
+import { LogOut, RefreshCw, Smartphone, Server } from 'lucide-react';
 
 const App: React.FC = () => {
   const [config, setConfig] = useState<ServerConfig | null>(null);
@@ -48,22 +48,24 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f7f2fa]">
-      {/* App Bar */}
-      <header className="sticky top-0 z-20 bg-white/80 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <Smartphone className="w-6 h-6 text-indigo-600" />
-          <h1 className="font-bold text-lg text-gray-800 truncate max-w-[150px]">
-            OpenList
-          </h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <button 
-            onClick={handleLogout}
-            className="p-2 hover:bg-red-50 text-red-500 rounded-full transition-colors"
-            title="Logout"
-          >
-            <LogOut className="w-5 h-5" />
-          </button>
+      {/* App Bar - Added pt-safe for status bar avoidance */}
+      <header className="sticky top-0 z-20 bg-white/80 backdrop-blur-md px-4 pt-safe flex flex-col border-b border-gray-100">
+        <div className="py-3 flex items-center justify-between w-full">
+          <div className="flex items-center gap-2">
+            <Server className="w-6 h-6 text-indigo-600" />
+            <h1 className="font-bold text-lg text-gray-800 truncate max-w-[150px]">
+              OpenList
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={handleLogout}
+              className="p-2 hover:bg-red-50 text-red-500 rounded-full transition-colors"
+              title="Logout"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -73,7 +75,7 @@ const App: React.FC = () => {
 
       {/* Global Status Banner for Errors */}
       {error && (
-        <div className="fixed bottom-20 left-4 right-4 bg-red-600 text-white p-3 rounded-lg shadow-lg flex items-center justify-between z-50 animate-bounce">
+        <div className="fixed bottom-24 left-4 right-4 bg-red-600 text-white p-3 rounded-xl shadow-lg flex items-center justify-between z-50 animate-bounce pb-safe">
           <span>{error}</span>
           <button onClick={() => setError(null)} className="ml-2 font-bold">X</button>
         </div>
