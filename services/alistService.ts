@@ -4,60 +4,94 @@ import { AuthResponse, FsListResponse, FsGetResponse, ServerConfig } from '../ty
 export class AListService {
   private baseUrl: string;
   private token: string;
-  private isHttps: boolean;
+  private protocol: string;
 
   constructor(config: ServerConfig) {
     this.baseUrl = config.url.endsWith('/') ? config.url.slice(0, -1) : config.url;
     this.token = config.token;
-    this.isHttps = this.baseUrl.startsWith('https://');
+    // Extract protocol to manage networking strategy
+    this.protocol = this.baseUrl.startsWith('https://') ? 'https://' : 'http://';
   }
 
+  /**
+   * Adjusts the protocol of incoming URLs (like thumb/raw_url) to match the server configuration
+   * to avoid mixed content issues or to ensure encrypted traffic if requested.
+   */
   private fixProtocol(url: string | undefined): string {
     if (!url) return '';
-    if (this.isHttps && url.startsWith('http://')) {
+    
+    // If we are using HTTPS base, we should try to promote http resources to https
+    if (this.protocol === 'https://' && url.startsWith('http://')) {
       return url.replace('http://', 'https://');
     }
+    
+    // If the server explicitly requested HTTP, we stick to what the server returns
+    // unless it's a relative path.
+    if (url.startsWith('/')) {
+      return `${this.baseUrl}${url}`;
+    }
+    
     return url;
   }
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // Increased to 20s for mobile networks
+
     const headers = {
       'Content-Type': 'application/json',
       'Authorization': this.token,
-      'AList-Token': this.token, // Some AList setups specifically require this
+      'AList-Token': this.token,
       ...(options.headers || {}),
     };
 
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      ...options,
-      headers,
-    });
+    try {
+      const response = await fetch(`${this.baseUrl}${path}`, {
+        ...options,
+        headers,
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      if (response.status === 401) {
-        throw new Error('Unauthorized: Token may be expired');
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Unauthorized: Session expired. Please log in again.');
+        }
+        throw new Error(`API Request Error: ${response.status}`);
       }
-      throw new Error(`Request failed with status ${response.status}`);
-    }
 
-    const json = await response.json();
-    if (json.code !== 200) {
-      throw new Error(json.message || 'API Error');
+      const json = await response.json();
+      if (json.code !== 200) {
+        throw new Error(json.message || 'AList API Error');
+      }
+      return json as T;
+    } catch (err: any) {
+      if (err.name === 'AbortError') throw new Error('Request timed out. Server might be under heavy load.');
+      throw err;
     }
-    return json as T;
   }
 
+  /**
+   * Static login method to verify credentials and obtain a token.
+   * Now takes the synthesized URL from the 3-part input UI.
+   */
   static async login(url: string, username: string, password: string): Promise<string> {
     const cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+    
     const response = await fetch(`${cleanUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
 
+    if (!response.ok) {
+      throw new Error(`Connection failed: ${response.status}`);
+    }
+
     const json: AuthResponse = await response.json();
     if (json.code !== 200) {
-      throw new Error(json.message || 'Login failed');
+      throw new Error(json.message || 'Authentication failed');
     }
     return json.data.token;
   }
@@ -96,10 +130,7 @@ export class AListService {
   }
 
   async deleteFile(path: string): Promise<void> {
-    // AList V3 remove API requires dir (parent path) and names array
     const lastSlashIndex = path.lastIndexOf('/');
-    
-    // Handle root files vs subdirectory files
     let dir = '/';
     let name = path;
 
@@ -139,12 +170,12 @@ export class AListService {
     });
 
     if (!response.ok) {
-      throw new Error(`Upload HTTP error: ${response.status}`);
+      throw new Error(`Upload failed: Server returned ${response.status}`);
     }
 
     const json = await response.json();
     if (json.code !== 200) {
-      throw new Error(json.message || 'Upload failed');
+      throw new Error(json.message || 'Upload task failed');
     }
   }
 }
