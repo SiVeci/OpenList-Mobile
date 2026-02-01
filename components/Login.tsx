@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ServerConfig } from '../types';
 import { AListService } from '../services/alistService';
-import { Server, User, Lock, ArrowRight, AlertTriangle, ShieldCheck, HelpCircle, Globe, Hash, Info } from 'lucide-react';
+import { Server, User, Lock, ArrowRight, AlertTriangle, ShieldCheck, HelpCircle, Globe, Hash, Info, Wifi } from 'lucide-react';
 
 interface Props {
   onLogin: (config: ServerConfig) => void;
@@ -15,25 +15,46 @@ const Login: React.FC<Props> = ({ onLogin }) => {
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<{ message: string, type?: 'mixed' | 'cors' | 'auth' } | null>(null);
+  const [error, setError] = useState<{ message: string, type?: 'mixed' | 'cors' | 'auth' | 'local' } | null>(null);
   const [isHttpsApp, setIsHttpsApp] = useState(false);
 
   useEffect(() => {
     setIsHttpsApp(window.location.protocol === 'https:');
-    // Default to HTTPS if the app itself is HTTPS to avoid immediate warnings
     if (window.location.protocol === 'https:') {
       setProtocol('https://');
     }
   }, []);
 
-  // Mixed content happens when app is HTTPS and target is HTTP
-  // EXCEPT for localhost/127.0.0.1 which browsers usually allow
-  const isLocal = address.toLowerCase() === 'localhost' || address === '127.0.0.1';
+  // Helper to detect local network addresses
+  const checkIsLocal = (addr: string) => {
+    const lower = addr.toLowerCase().trim();
+    if (!lower) return false;
+    
+    // Exact matches
+    if (lower === 'localhost' || lower === '127.0.0.1' || lower.endsWith('.local')) return true;
+    
+    // IPv4 Private Ranges (RFC 1918)
+    // 192.168.x.x
+    if (/^192\.168\./.test(lower)) return true;
+    // 10.x.x.x
+    if (/^10\./.test(lower)) return true;
+    // 172.16.x.x - 172.31.x.x
+    const parts = lower.split('.');
+    if (parts.length === 4 && parts[0] === '172') {
+      const secondPart = parseInt(parts[1], 10);
+      if (secondPart >= 16 && secondPart <= 31) return true;
+    }
+    
+    return false;
+  };
+
+  const isLocal = checkIsLocal(address);
+  // We still warn about Mixed Content for local IPs if the app is HTTPS, 
+  // but we provide better messaging as browsers often treat local IPs differently.
   const isMixedContent = isHttpsApp && protocol === 'http://' && !isLocal;
 
   const handleAddressChange = (val: string) => {
     let clean = val.trim();
-    // Auto-detect protocol if user pastes a full URL
     if (clean.toLowerCase().startsWith('https://')) {
       setProtocol('https://');
       clean = clean.substring(8);
@@ -42,7 +63,6 @@ const Login: React.FC<Props> = ({ onLogin }) => {
       clean = clean.substring(7);
     }
     
-    // Auto-detect port if user pastes address:port
     if (clean.includes(':')) {
       const parts = clean.split(':');
       clean = parts[0];
@@ -62,7 +82,6 @@ const Login: React.FC<Props> = ({ onLogin }) => {
 
     const cleanAddress = address.trim().replace(/\/$/, "");
     const cleanPort = port.trim();
-    // Synthesize the URL
     const targetUrl = `${protocol}${cleanAddress}${cleanPort ? `:${cleanPort}` : ''}`;
 
     if (!cleanAddress) {
@@ -80,12 +99,17 @@ const Login: React.FC<Props> = ({ onLogin }) => {
       if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
         if (isMixedContent) {
           setError({ 
-            message: 'Mixed Content Blocked: You are trying to connect to an insecure HTTP server from this secure HTTPS website. Your browser blocks this for security.',
+            message: 'Mixed Content Blocked: HTTPS apps cannot connect to external HTTP servers. Please use HTTPS or access this app via an HTTP connection.',
             type: 'mixed'
+          });
+        } else if (isLocal) {
+          setError({ 
+            message: 'Local connection failed. Please ensure your phone is connected to the same Wi-Fi as your AList server and that "Allow Origins: *" is set in AList settings.',
+            type: 'local'
           });
         } else {
           setError({ 
-            message: 'Network unreachable. Please ensure: 1. Your AList server is running. 2. The IP/Domain and Port are correct. 3. "Allow Origins" is set to "*" in AList settings.',
+            message: 'Network unreachable. Verify the IP/Port and check if AList is running.',
             type: 'cors'
           });
         }
@@ -101,7 +125,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
     <div className="min-h-screen bg-[#f7f2fa] flex items-center justify-center px-6">
       <div className="w-full max-w-md bg-white rounded-[40px] p-8 shadow-sm border border-gray-100">
         <div className="flex flex-col items-center mb-10">
-          <div className="w-20 h-20 bg-indigo-600 rounded-[2rem] flex items-center justify-center mb-4 shadow-xl shadow-indigo-100 rotate-3">
+          <div className="w-20 h-20 bg-indigo-600 rounded-[2rem] flex items-center justify-center mb-4 shadow-xl shadow-indigo-100 rotate-3 transition-transform hover:rotate-0">
             <Server className="w-10 h-10 text-white -rotate-3" />
           </div>
           <h2 className="text-3xl font-black text-gray-900 tracking-tight">OpenList</h2>
@@ -109,18 +133,21 @@ const Login: React.FC<Props> = ({ onLogin }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Three-Part Configuration Group */}
           <div className="space-y-3">
             <div className="flex justify-between items-center px-1">
               <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Server Config</label>
               <div className="flex items-center gap-1.5">
-                {protocol === 'https://' ? (
+                {isLocal ? (
+                  <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Wifi className="w-3 h-3"/> Local Network
+                  </span>
+                ) : protocol === 'https://' ? (
                   <span className="text-[10px] text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3"/> SSL
+                    <ShieldCheck className="w-3 h-3"/> SSL Secure
                   </span>
                 ) : (
                   <span className="text-[10px] text-orange-600 font-bold bg-orange-50 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3"/> NO SSL
+                    <AlertTriangle className="w-3 h-3"/> No SSL
                   </span>
                 )}
               </div>
@@ -128,25 +155,23 @@ const Login: React.FC<Props> = ({ onLogin }) => {
 
             <div className="bg-gray-50/50 p-2 rounded-[2rem] border border-gray-100 space-y-2">
               <div className="flex gap-2">
-                {/* Protocol Toggle */}
                 <div className="flex bg-gray-200/50 p-1 rounded-2xl w-32 shrink-0">
                   <button
                     type="button"
                     onClick={() => setProtocol('http://')}
-                    className={`flex-1 text-[10px] font-black py-2.5 rounded-xl transition-all ${protocol === 'http://' ? 'bg-white text-indigo-600 shadow-sm scale-100' : 'text-gray-400 scale-95'}`}
+                    className={`flex-1 text-[10px] font-black py-2.5 rounded-xl transition-all ${protocol === 'http://' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-400'}`}
                   >
                     HTTP
                   </button>
                   <button
                     type="button"
                     onClick={() => setProtocol('https://')}
-                    className={`flex-1 text-[10px] font-black py-2.5 rounded-xl transition-all ${protocol === 'https://' ? 'bg-white text-indigo-600 shadow-sm scale-100' : 'text-gray-400 scale-95'}`}
+                    className={`flex-1 text-[10px] font-black py-2.5 rounded-xl transition-all ${protocol === 'https://' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-400'}`}
                   >
                     HTTPS
                   </button>
                 </div>
 
-                {/* Port Input */}
                 <div className="relative flex-1">
                   <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
                   <input
@@ -159,14 +184,13 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                 </div>
               </div>
 
-              {/* Address Input */}
               <div className="relative w-full">
                 <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300" />
                 <input
                   type="text"
                   required
-                  placeholder="Address (IP or Domain)"
-                  className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-semibold text-gray-800 placeholder:text-gray-300 transition-all"
+                  placeholder="Local IP or Domain"
+                  className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-semibold text-gray-800 transition-all"
                   value={address}
                   onChange={(e) => handleAddressChange(e.target.value)}
                 />
@@ -177,9 +201,9 @@ const Login: React.FC<Props> = ({ onLogin }) => {
               <div className="p-4 bg-orange-50 border border-orange-100 rounded-3xl flex gap-3 animate-in slide-in-from-bottom-2">
                 <Info className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="text-[11px] text-orange-800 font-bold leading-tight">BROWSER SECURITY WARNING</p>
+                  <p className="text-[11px] text-orange-800 font-bold leading-tight">SECURITY NOTICE</p>
                   <p className="text-[11px] text-orange-700 leading-snug">
-                    HTTPS apps cannot connect to HTTP servers. To fix this, access this app via <strong>http://</strong> or enable <strong>HTTPS</strong> on your AList server.
+                    HTTPS apps are blocked from connecting to remote HTTP servers. Since this is not a local IP, please use HTTPS or switch to an HTTP host.
                   </p>
                 </div>
               </div>
@@ -219,15 +243,24 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                 <div className="font-semibold leading-relaxed">{error.message}</div>
               </div>
               
-              {error.type === 'mixed' && (
+              {(error.type === 'mixed' || error.type === 'local' || error.type === 'cors') && (
                 <div className="bg-white/50 p-3 rounded-2xl border border-red-100/50 space-y-2">
                   <p className="font-bold text-red-800 flex items-center gap-1 uppercase tracking-tighter">
-                    <HelpCircle className="w-3 h-3" /> Solutions:
+                    <HelpCircle className="w-3 h-3" /> Possible Fixes:
                   </p>
                   <ul className="list-disc list-inside space-y-1 text-red-600">
-                    <li>Open this app using <b>HTTP</b> (e.g. your local IP)</li>
-                    <li>Setup <b>HTTPS/SSL</b> for your AList server</li>
-                    <li>If on Android, use a dedicated <b>AList App</b></li>
+                    {error.type === 'local' ? (
+                      <>
+                        <li>Ensure Wi-Fi is on and connected</li>
+                        <li>Check if server IP <b>{address}</b> is reachable</li>
+                        <li>Set <b>Allow Origins: *</b> in AList Settings</li>
+                      </>
+                    ) : (
+                      <>
+                        <li>Access app via <b>HTTP</b> instead of HTTPS</li>
+                        <li>Setup <b>SSL</b> on your AList server</li>
+                      </>
+                    )}
                   </ul>
                 </div>
               )}
@@ -251,7 +284,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
         </form>
 
         <p className="text-center text-[10px] text-gray-300 mt-10 font-bold uppercase tracking-[0.2em]">
-          Version 2.5 • Native Engine
+          Local-Ready Engine • v2.6
         </p>
       </div>
       
