@@ -3,6 +3,7 @@ export interface ServerConfig {
   url: string;
   username: string;
   token: string;
+  serverName: string;
 }
 
 export interface AListFile {

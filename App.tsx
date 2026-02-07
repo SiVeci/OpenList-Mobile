@@ -53,8 +53,8 @@ const App: React.FC = () => {
         <div className="py-3 flex items-center justify-between w-full">
           <div className="flex items-center gap-2">
             <Server className="w-6 h-6 text-indigo-600" />
-            <h1 className="font-bold text-lg text-gray-800 truncate max-w-[150px]">
-              OpenList
+            <h1 className="font-bold text-lg text-gray-800 truncate max-w-[200px]">
+              {config.serverName || 'OpenList'}
             </h1>
           </div>
           <div className="flex items-center gap-2">
