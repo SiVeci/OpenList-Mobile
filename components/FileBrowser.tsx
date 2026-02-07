@@ -1,15 +1,35 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ServerConfig, AListFile } from '../types';
 import { AListService } from '../services/alistService';
 import FileIcon from './FileIcon';
 import ActionSheet from './ActionSheet';
-import { ChevronRight, Home, LayoutGrid, List, Search, ArrowLeft, MoreVertical, RefreshCw, Plus, Upload, AlertCircle } from 'lucide-react';
+import { 
+  ChevronRight, 
+  Home, 
+  LayoutGrid, 
+  List, 
+  Search, 
+  ArrowLeft, 
+  MoreVertical, 
+  RefreshCw, 
+  Plus, 
+  Upload, 
+  AlertCircle,
+  ArrowUpDown,
+  Check,
+  ArrowUpNarrowWide,
+  ArrowDownWideNarrow,
+  FolderTree
+} from 'lucide-react';
 
 interface Props {
   config: ServerConfig;
   onSessionExpired: () => void;
 }
+
+type SortKey = 'name' | 'modified' | 'size';
+type SortOrder = 'asc' | 'desc';
 
 const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   const [path, setPath] = useState('/');
@@ -20,7 +40,13 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [selectedFile, setSelectedFile] = useState<{ file: AListFile, path: string } | null>(null);
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   
+  // Sorting Preferences (Persisted)
+  const [sortKey, setSortKey] = useState<SortKey>(() => (localStorage.getItem('alist_sort_key') as SortKey) || 'name');
+  const [sortOrder, setSortOrder] = useState<SortOrder>(() => (localStorage.getItem('alist_sort_order') as SortOrder) || 'asc');
+  const [foldersFirst, setFoldersFirst] = useState<boolean>(() => localStorage.getItem('alist_folders_first') !== 'false');
+
   // Touch gesture refs
   const touchStartPos = useRef({ x: 0, y: 0 });
   const touchStartTime = useRef(0);
@@ -28,17 +54,19 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   const serviceRef = useRef(new AListService(config));
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Persistence Effects
+  useEffect(() => {
+    localStorage.setItem('alist_sort_key', sortKey);
+    localStorage.setItem('alist_sort_order', sortOrder);
+    localStorage.setItem('alist_folders_first', String(foldersFirst));
+  }, [sortKey, sortOrder, foldersFirst]);
+
   const fetchFiles = useCallback(async (currentPath: string, forceRefresh = false) => {
     setLoading(true);
     setErrorMsg(null);
     try {
       const response = await serviceRef.current.listFiles(currentPath, 1, 100, forceRefresh);
-      const sorted = (response.data.content || []).sort((a, b) => {
-        if (a.is_dir && !b.is_dir) return -1;
-        if (!a.is_dir && b.is_dir) return 1;
-        return a.name.localeCompare(b.name);
-      });
-      setFiles(sorted);
+      setFiles(response.data.content || []);
     } catch (err: any) {
       if (err.message.includes('Unauthorized')) {
         onSessionExpired();
@@ -54,6 +82,37 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     fetchFiles(path);
   }, [path, fetchFiles]);
 
+  // Client-side Sorting Logic
+  const sortedAndFilteredFiles = useMemo(() => {
+    let result = [...files].filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    result.sort((a, b) => {
+      // 1. Folders First Logic
+      if (foldersFirst) {
+        if (a.is_dir && !b.is_dir) return -1;
+        if (!a.is_dir && b.is_dir) return 1;
+      }
+
+      // 2. Main Sort Key
+      let comparison = 0;
+      switch (sortKey) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+          break;
+        case 'size':
+          comparison = (a.size || 0) - (b.size || 0);
+          break;
+        case 'modified':
+          comparison = new Date(a.modified).getTime() - new Date(b.modified).getTime();
+          break;
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [files, searchQuery, sortKey, sortOrder, foldersFirst]);
+
   const handleNavigate = (newPath: string) => {
     setPath(newPath);
     setSearchQuery('');
@@ -66,36 +125,19 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     setPath('/' + parts.join('/'));
   }, [path]);
 
-  // Enhanced Gesture handling
+  // Gesture handling
   const handleTouchStart = (e: React.TouchEvent) => {
-    // Only track single touches for the back gesture
     if (e.touches.length !== 1) return;
-    
-    touchStartPos.current = { 
-      x: e.touches[0].clientX, 
-      y: e.touches[0].clientY 
-    };
+    touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     touchStartTime.current = Date.now();
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (e.changedTouches.length !== 1) return;
-
     const deltaX = e.changedTouches[0].clientX - touchStartPos.current.x;
     const deltaY = e.changedTouches[0].clientY - touchStartPos.current.y;
     const duration = Date.now() - touchStartTime.current;
-
-    // Detection logic:
-    // 1. Starts from the far left edge (within 40px)
-    // 2. Swipes significantly to the right (at least 100px)
-    // 3. Movement is mostly horizontal (X distance is at least 2x the Y distance)
-    // 4. Action is relatively quick (under 500ms)
-    const isFromEdge = touchStartPos.current.x < 40; 
-    const isRightwardSwipe = deltaX > 100;
-    const isMainlyHorizontal = Math.abs(deltaX) > Math.abs(deltaY) * 2;
-    const isQuickEnough = duration < 500;
-
-    if (isFromEdge && isRightwardSwipe && isMainlyHorizontal && isQuickEnough) {
+    if (touchStartPos.current.x < 40 && deltaX > 100 && Math.abs(deltaX) > Math.abs(deltaY) * 2 && duration < 500) {
       goBack();
     }
   };
@@ -108,13 +150,12 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setUploading(true);
     try {
       await serviceRef.current.uploadFile(path, file);
       await fetchFiles(path, true);
     } catch (err: any) {
-      setErrorMsg(`Upload failed: ${err.message}. Ensure the storage is writable.`);
+      setErrorMsg(`Upload failed: ${err.message}`);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -134,41 +175,48 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const filteredFiles = files.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
   const breadcrumbs = path.split('/').filter(Boolean);
 
   return (
     <div 
       className="h-full flex flex-col bg-[#f7f2fa] relative overflow-hidden"
-      style={{ touchAction: 'pan-y' }} // Tell browser we handle horizontal swipes (like back gesture)
+      style={{ touchAction: 'pan-y' }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Search & View Toggle */}
-      <div className="px-4 py-3 flex gap-2 items-center bg-white border-b border-gray-100 z-10">
+      {/* Search & Toolbar */}
+      <div className="px-4 py-3 flex gap-2 items-center bg-white border-b border-gray-100 z-10 shadow-sm">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input 
             type="text" 
             placeholder="Search files..."
-            className="w-full pl-9 pr-4 py-2 bg-gray-100 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+            className="w-full pl-9 pr-4 py-2.5 bg-gray-100 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-medium transition-all"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <button 
-          onClick={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}
-          className="p-2 bg-gray-100 rounded-xl text-gray-600 hover:bg-gray-200 active:scale-95 transition-transform"
-        >
-          {viewMode === 'list' ? <LayoutGrid className="w-5 h-5" /> : <List className="w-5 h-5" />}
-        </button>
+        <div className="flex gap-1">
+          <button 
+            onClick={() => setIsSortMenuOpen(true)}
+            className={`p-2.5 rounded-2xl transition-all active:scale-95 ${isSortMenuOpen ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'}`}
+          >
+            <ArrowUpDown className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}
+            className="p-2.5 bg-gray-100 rounded-2xl text-gray-600 hover:bg-gray-200 active:scale-95 transition-all"
+          >
+            {viewMode === 'list' ? <LayoutGrid className="w-5 h-5" /> : <List className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
 
       {/* Breadcrumbs */}
-      <div className="flex items-center gap-1 px-4 py-2 overflow-x-auto whitespace-nowrap hide-scrollbar bg-white/50 backdrop-blur-sm border-b border-gray-100 text-sm z-10">
+      <div className="flex items-center gap-1 px-4 py-3 overflow-x-auto whitespace-nowrap hide-scrollbar bg-white/50 backdrop-blur-sm border-b border-gray-100 text-sm z-10">
         <button 
           onClick={() => handleNavigate('/')}
-          className="p-1 hover:text-indigo-600 flex items-center text-gray-500"
+          className="p-1 hover:text-indigo-600 flex items-center text-gray-400"
         >
           <Home className="w-4 h-4" />
         </button>
@@ -177,7 +225,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
             <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
             <button 
               onClick={() => handleNavigate('/' + breadcrumbs.slice(0, idx + 1).join('/'))}
-              className={`hover:text-indigo-600 ${idx === breadcrumbs.length - 1 ? 'font-semibold text-gray-800' : 'text-gray-500'}`}
+              className={`hover:text-indigo-600 px-1 rounded-md transition-colors ${idx === breadcrumbs.length - 1 ? 'font-bold text-indigo-600 bg-indigo-50/50' : 'text-gray-500'}`}
             >
               {crumb}
             </button>
@@ -190,38 +238,39 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
         <div className="mx-4 mt-2 p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-100 flex items-center gap-2 shadow-sm animate-pulse z-10">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <p className="flex-1">{errorMsg}</p>
-          <button onClick={() => setErrorMsg(null)} className="p-1 font-bold opacity-50 hover:opacity-100">✕</button>
+          <button onClick={() => setErrorMsg(null)} className="p-1 font-bold opacity-50">✕</button>
         </div>
       )}
 
       {/* File List */}
       <div className="flex-1 overflow-y-auto px-4 pt-2 pb-24 touch-pan-y">
         {loading ? (
-          <div className="h-40 flex flex-col items-center justify-center gap-2">
-            <RefreshCw className="w-6 h-6 text-indigo-600 animate-spin" />
-            <span className="text-sm text-gray-500 font-medium">Scanning storage...</span>
+          <div className="h-60 flex flex-col items-center justify-center gap-3">
+            <div className="w-10 h-10 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
+            <span className="text-sm text-gray-400 font-bold uppercase tracking-widest">Scanning...</span>
           </div>
-        ) : filteredFiles.length === 0 ? (
-          <div className="h-40 flex flex-col items-center justify-center text-gray-400">
-            <p className="text-sm">No files found</p>
+        ) : sortedAndFilteredFiles.length === 0 ? (
+          <div className="h-60 flex flex-col items-center justify-center text-gray-400 opacity-50 scale-110 grayscale">
+             <Search className="w-16 h-16 mb-4" />
+             <p className="text-sm font-medium">Nothing matches your view</p>
           </div>
         ) : (
-          <div className={viewMode === 'list' ? 'flex flex-col gap-1' : 'grid grid-cols-3 sm:grid-cols-4 gap-4'}>
-            {filteredFiles.map((file) => (
+          <div className={viewMode === 'list' ? 'flex flex-col gap-1.5' : 'grid grid-cols-3 sm:grid-cols-4 gap-4'}>
+            {sortedAndFilteredFiles.map((file) => (
               <div 
                 key={file.name}
                 onClick={() => file.is_dir ? handleNavigate((path === '/' ? '' : path) + '/' + file.name) : setSelectedFile({ file, path: (path === '/' ? '' : path) + '/' + file.name })}
                 className={`
-                  relative group transition-all active:scale-[0.97] overflow-hidden
+                  relative group transition-all active:scale-[0.96] overflow-hidden
                   ${viewMode === 'list' 
-                    ? 'flex items-center gap-4 p-3 bg-white rounded-2xl border border-transparent active:border-indigo-100 hover:bg-indigo-50/30' 
-                    : 'flex flex-col items-center p-3 bg-white rounded-2xl border border-transparent shadow-sm'
+                    ? 'flex items-center gap-4 p-3 bg-white rounded-[1.5rem] border border-transparent shadow-sm hover:border-indigo-100' 
+                    : 'flex flex-col items-center p-3 bg-white rounded-[1.5rem] border border-transparent shadow-sm'
                   }
                 `}
               >
-                <div className={`${viewMode === 'list' ? 'shrink-0' : 'w-full aspect-square flex items-center justify-center mb-2 shrink-0'}`}>
+                <div className={`${viewMode === 'list' ? 'shrink-0' : 'w-full aspect-square flex items-center justify-center mb-2 shrink-0 bg-gray-50 rounded-2xl'}`}>
                   {file.thumb ? (
-                     <img src={file.thumb} alt="" className="w-10 h-10 rounded-lg object-cover shadow-sm" />
+                     <img src={file.thumb} alt="" className="w-10 h-10 rounded-xl object-cover shadow-sm" />
                   ) : (
                     <FileIcon isDir={file.is_dir} name={file.name} className={viewMode === 'list' ? 'w-8 h-8' : 'w-12 h-12'} />
                   )}
@@ -229,7 +278,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                 
                 <div className={`min-w-0 ${viewMode === 'grid' ? 'w-full text-center' : 'flex-1'}`}>
                   <h3 className={`
-                    font-medium text-gray-800 break-words
+                    font-bold text-gray-800 break-words
                     ${viewMode === 'list' 
                       ? 'text-sm truncate' 
                       : 'text-[11px] leading-tight line-clamp-2 h-7 overflow-hidden px-1'
@@ -238,8 +287,10 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                     {file.name}
                   </h3>
                   {viewMode === 'list' && (
-                    <p className="text-[10px] text-gray-400 mt-0.5 flex items-center gap-2">
+                    <p className="text-[10px] text-gray-400 mt-1 flex items-center gap-2 font-medium">
                       {!file.is_dir && <span>{formatSize(file.size)}</span>}
+                      {file.is_dir && <span>Folder</span>}
+                      <span className="opacity-30">•</span>
                       <span>{formatDate(file.modified)}</span>
                     </p>
                   )}
@@ -251,7 +302,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                       e.stopPropagation();
                       setSelectedFile({ file, path: (path === '/' ? '' : path) + '/' + file.name });
                     }}
-                    className="p-2 hover:bg-gray-100 rounded-full text-gray-400 shrink-0"
+                    className="p-2 hover:bg-gray-50 rounded-full text-gray-300 transition-colors"
                    >
                      <MoreVertical className="w-5 h-5" />
                    </button>
@@ -262,23 +313,110 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
         )}
       </div>
 
+      {/* Sort Menu Overlay */}
+      {isSortMenuOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-in fade-in" onClick={() => setIsSortMenuOpen(false)} />
+          <div className="relative w-full max-w-lg bg-white rounded-t-[3rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 pb-safe">
+            <div className="w-12 h-1.5 bg-gray-100 rounded-full mx-auto mb-8" />
+            
+            <h3 className="text-xl font-black text-gray-900 mb-8 px-2 flex items-center gap-3">
+              <ArrowUpDown className="w-6 h-6 text-indigo-600" />
+              Display Options
+            </h3>
+
+            <div className="space-y-6">
+              {/* Sort By Section */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-2">Sort Files By</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { key: 'name', label: 'Name' },
+                    { key: 'modified', label: 'Date' },
+                    { key: 'size', label: 'Size' }
+                  ].map((item) => (
+                    <button
+                      key={item.key}
+                      onClick={() => setSortKey(item.key as SortKey)}
+                      className={`py-4 rounded-2xl text-xs font-bold transition-all flex flex-col items-center gap-2 ${sortKey === item.key ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-gray-50 text-gray-500'}`}
+                    >
+                      {item.label}
+                      {sortKey === item.key && <Check className="w-3 h-3" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Order Section */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-2">Sort Direction</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSortOrder('asc')}
+                    className={`flex-1 py-4 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${sortOrder === 'asc' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-gray-50 text-gray-500 border border-transparent'}`}
+                  >
+                    <ArrowUpNarrowWide className="w-4 h-4" />
+                    Ascending
+                  </button>
+                  <button
+                    onClick={() => setSortOrder('desc')}
+                    className={`flex-1 py-4 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${sortOrder === 'desc' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-gray-50 text-gray-500 border border-transparent'}`}
+                  >
+                    <ArrowDownWideNarrow className="w-4 h-4" />
+                    Descending
+                  </button>
+                </div>
+              </div>
+
+              {/* Toggles */}
+              <div className="space-y-3 pt-4">
+                <div 
+                  onClick={() => setFoldersFirst(!foldersFirst)}
+                  className="flex items-center justify-between p-5 bg-gray-50 rounded-[2rem] active:bg-gray-100 transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-2xl transition-colors ${foldersFirst ? 'bg-indigo-100 text-indigo-600' : 'bg-white text-gray-400'}`}>
+                      <FolderTree className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-gray-800">Folders always first</p>
+                      <p className="text-[10px] text-gray-400 font-medium">Keep folders grouped at the top</p>
+                    </div>
+                  </div>
+                  <div className={`w-12 h-6 rounded-full relative transition-colors ${foldersFirst ? 'bg-indigo-600' : 'bg-gray-200'}`}>
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${foldersFirst ? 'left-7' : 'left-1'}`} />
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => setIsSortMenuOpen(false)}
+                className="w-full py-5 bg-gray-900 text-white rounded-[2rem] font-black text-sm active:scale-[0.98] transition-all shadow-xl shadow-gray-200 mt-4"
+              >
+                Apply Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* FAB Container */}
       <div className="fixed bottom-6 right-6 flex flex-col gap-4 z-30 pb-safe">
         <button 
           onClick={handleUploadClick}
           disabled={uploading}
-          className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-xl flex items-center justify-center active:scale-90 transition-all disabled:opacity-50"
+          className="w-14 h-14 bg-indigo-600 text-white rounded-[1.5rem] shadow-xl flex items-center justify-center active:scale-90 transition-all disabled:opacity-50"
         >
           {uploading ? <RefreshCw className="w-6 h-6 animate-spin" /> : <Plus className="w-8 h-8" />}
         </button>
         <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
       </div>
 
-      {/* Back Button (Visual Fallback) */}
+      {/* Back Button */}
       {path !== '/' && (
         <button 
           onClick={goBack}
-          className="fixed bottom-6 left-6 w-12 h-12 bg-white text-indigo-600 rounded-full shadow-lg border border-indigo-50 flex items-center justify-center active:scale-90 transition-all z-30 mb-safe ml-safe"
+          className="fixed bottom-6 left-6 w-12 h-12 bg-white text-indigo-600 rounded-[1.2rem] shadow-lg border border-indigo-50 flex items-center justify-center active:scale-90 transition-all z-30 mb-safe ml-safe"
         >
           <ArrowLeft className="w-6 h-6" />
         </button>
@@ -286,9 +424,9 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
 
       {/* Status Overlay */}
       {uploading && (
-        <div className="fixed bottom-24 right-6 bg-indigo-600 text-white px-4 py-2 rounded-xl shadow-lg flex items-center gap-3 z-40 mb-safe animate-bounce">
+        <div className="fixed bottom-24 right-6 bg-indigo-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 z-40 mb-safe animate-bounce">
           <Upload className="w-4 h-4" />
-          <span className="text-xs font-semibold">Uploading...</span>
+          <span className="text-[10px] font-black uppercase tracking-widest">Uploading</span>
         </div>
       )}
 

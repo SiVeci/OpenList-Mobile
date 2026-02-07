@@ -129,7 +129,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
             <Server className="w-10 h-10 text-white -rotate-3" />
           </div>
           <h2 className="text-3xl font-black text-gray-900 tracking-tight">OpenList</h2>
-          <p className="text-gray-400 text-sm font-medium mt-1">Connect to your AList storage</p>
+          <p className="text-gray-400 text-sm font-medium mt-1">Connect to your storage</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -284,7 +284,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
         </form>
 
         <p className="text-center text-[10px] text-gray-300 mt-10 font-bold uppercase tracking-[0.2em]">
-          Local-Ready Engine • v2.6
+          SUPPORT ALIST AND OPENLIST SERVERS
         </p>
       </div>
       
