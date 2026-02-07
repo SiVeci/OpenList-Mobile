@@ -20,7 +20,14 @@ import {
   Check,
   ArrowUpNarrowWide,
   ArrowDownWideNarrow,
-  FolderTree
+  FolderTree,
+  Filter,
+  FileVideo,
+  FileImage,
+  FileText,
+  FileBox,
+  Hash,
+  X
 } from 'lucide-react';
 
 interface Props {
@@ -30,6 +37,7 @@ interface Props {
 
 type SortKey = 'name' | 'modified' | 'size';
 type SortOrder = 'asc' | 'desc';
+type FilterType = 'all' | 'video' | 'image' | 'doc' | 'others' | 'custom';
 
 const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   const [path, setPath] = useState('/');
@@ -41,7 +49,12 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [selectedFile, setSelectedFile] = useState<{ file: AListFile, path: string } | null>(null);
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   
+  // Filter State
+  const [filterType, setFilterType] = useState<FilterType>('all');
+  const [customExt, setCustomExt] = useState('');
+
   // Sorting Preferences (Persisted)
   const [sortKey, setSortKey] = useState<SortKey>(() => (localStorage.getItem('alist_sort_key') as SortKey) || 'name');
   const [sortOrder, setSortOrder] = useState<SortOrder>(() => (localStorage.getItem('alist_sort_order') as SortOrder) || 'asc');
@@ -82,18 +95,43 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     fetchFiles(path);
   }, [path, fetchFiles]);
 
-  // Client-side Sorting Logic
+  // Client-side Sorting and Filtering Logic
   const sortedAndFilteredFiles = useMemo(() => {
-    let result = [...files].filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    const videoExts = ['mp4', 'mkv', 'avi', 'mov', 'flv', 'wmv', 'rmvb'];
+    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
+    // Expanded document list to include all previewable text formats and standard docs
+    const docExts = [
+      'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', // Office
+      'txt', 'md', 'json', 'yaml', 'yml', 'js', 'ts', 'py', 'css', 'html', 'conf', 'ini', 'log', // Text/Code (Previewable)
+      'tsx', 'jsx', 'sh', 'sql', 'xml', 'csv', 'go', 'c', 'cpp', 'java' // Additional Code
+    ];
+
+    let result = files.filter(f => {
+      const matchesSearch = f.name.toLowerCase().includes(searchQuery.toLowerCase());
+      if (!matchesSearch) return false;
+
+      if (f.is_dir) return true;
+
+      const ext = f.name.split('.').pop()?.toLowerCase() || '';
+
+      switch (filterType) {
+        case 'video': return videoExts.includes(ext);
+        case 'image': return imageExts.includes(ext);
+        case 'doc': return docExts.includes(ext);
+        case 'others': 
+          return !videoExts.includes(ext) && !imageExts.includes(ext) && !docExts.includes(ext);
+        case 'custom':
+          return customExt ? ext === customExt.toLowerCase().trim().replace('.', '') : true;
+        default: return true;
+      }
+    });
     
     result.sort((a, b) => {
-      // 1. Folders First Logic
       if (foldersFirst) {
         if (a.is_dir && !b.is_dir) return -1;
         if (!a.is_dir && b.is_dir) return 1;
       }
 
-      // 2. Main Sort Key
       let comparison = 0;
       switch (sortKey) {
         case 'name':
@@ -111,11 +149,12 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     });
 
     return result;
-  }, [files, searchQuery, sortKey, sortOrder, foldersFirst]);
+  }, [files, searchQuery, sortKey, sortOrder, foldersFirst, filterType, customExt]);
 
   const handleNavigate = (newPath: string) => {
     setPath(newPath);
     setSearchQuery('');
+    setFilterType('all');
   };
 
   const goBack = useCallback(() => {
@@ -123,9 +162,9 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     const parts = path.split('/').filter(Boolean);
     parts.pop();
     setPath('/' + parts.join('/'));
+    setFilterType('all');
   }, [path]);
 
-  // Gesture handling
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length !== 1) return;
     touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -177,6 +216,15 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
 
   const breadcrumbs = path.split('/').filter(Boolean);
 
+  const filterChips: { id: FilterType, label: string, icon: any }[] = [
+    { id: 'all', label: 'All Files', icon: Filter },
+    { id: 'video', label: 'Videos', icon: FileVideo },
+    { id: 'image', label: 'Images', icon: FileImage },
+    { id: 'doc', label: 'Documents', icon: FileText },
+    { id: 'others', label: 'Others', icon: FileBox },
+    { id: 'custom', label: 'By Extension', icon: Hash },
+  ];
+
   return (
     <div 
       className="h-full flex flex-col bg-[#f7f2fa] relative overflow-hidden"
@@ -184,31 +232,50 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Search & Toolbar */}
-      <div className="px-4 py-3 flex gap-2 items-center bg-white border-b border-gray-100 z-10 shadow-sm">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input 
-            type="text" 
-            placeholder="Search files..."
-            className="w-full pl-9 pr-4 py-2.5 bg-gray-100 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-medium transition-all"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-        <div className="flex gap-1">
-          <button 
-            onClick={() => setIsSortMenuOpen(true)}
-            className={`p-2.5 rounded-2xl transition-all active:scale-95 ${isSortMenuOpen ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'}`}
-          >
-            <ArrowUpDown className="w-5 h-5" />
-          </button>
-          <button 
-            onClick={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}
-            className="p-2.5 bg-gray-100 rounded-2xl text-gray-600 hover:bg-gray-200 active:scale-95 transition-all"
-          >
-            {viewMode === 'list' ? <LayoutGrid className="w-5 h-5" /> : <List className="w-5 h-5" />}
-          </button>
+      {/* Search & Toolbar Area */}
+      <div className="bg-white border-b border-gray-100 z-10 shadow-sm">
+        <div className="px-4 py-3 flex gap-2 items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Search files..."
+              className="w-full pl-9 pr-4 py-2.5 bg-gray-100 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-medium transition-all"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+          <div className="flex gap-1 shrink-0">
+            <button 
+              onClick={() => setIsFilterMenuOpen(true)}
+              className={`p-2.5 rounded-2xl transition-all active:scale-95 border ${filterType !== 'all' ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-gray-100 border-transparent text-gray-600'}`}
+              title="Filter"
+            >
+              <Filter className="w-5 h-5" />
+            </button>
+            <button 
+              onClick={() => setIsSortMenuOpen(true)}
+              className={`p-2.5 rounded-2xl transition-all active:scale-95 border ${isSortMenuOpen ? 'bg-indigo-100 border-indigo-200 text-indigo-600' : 'bg-gray-100 border-transparent text-gray-600'}`}
+              title="Sort"
+            >
+              <ArrowUpDown className="w-5 h-5" />
+            </button>
+            <button 
+              onClick={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}
+              className="p-2.5 bg-gray-100 rounded-2xl text-gray-600 hover:bg-gray-200 active:scale-95 transition-all border border-transparent"
+              title="View Mode"
+            >
+              {viewMode === 'list' ? <LayoutGrid className="w-5 h-5" /> : <List className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -252,7 +319,13 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
         ) : sortedAndFilteredFiles.length === 0 ? (
           <div className="h-60 flex flex-col items-center justify-center text-gray-400 opacity-50 scale-110 grayscale">
              <Search className="w-16 h-16 mb-4" />
-             <p className="text-sm font-medium">Nothing matches your view</p>
+             <p className="text-sm font-medium">Nothing matches your filters</p>
+             <button 
+              onClick={() => {setFilterType('all'); setSearchQuery(''); setCustomExt('');}}
+              className="mt-4 text-indigo-600 text-xs font-bold bg-indigo-50 px-4 py-2 rounded-full active:scale-95 transition-all"
+             >
+              Clear All Filters
+             </button>
           </div>
         ) : (
           <div className={viewMode === 'list' ? 'flex flex-col gap-1.5' : 'grid grid-cols-3 sm:grid-cols-4 gap-4'}>
@@ -313,6 +386,64 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
         )}
       </div>
 
+      {/* Filter Menu Overlay */}
+      {isFilterMenuOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-in fade-in" onClick={() => setIsFilterMenuOpen(false)} />
+          <div className="relative w-full max-w-lg bg-white rounded-t-[3rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 pb-safe">
+            <div className="w-12 h-1.5 bg-gray-100 rounded-full mx-auto mb-8" />
+            
+            <h3 className="text-xl font-black text-gray-900 mb-8 px-2 flex items-center gap-3">
+              <Filter className="w-6 h-6 text-indigo-600" />
+              Filter Files
+            </h3>
+
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-2">Select Category</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {filterChips.map((chip) => (
+                    <button
+                      key={chip.id}
+                      onClick={() => setFilterType(chip.id)}
+                      className={`py-4 rounded-2xl text-xs font-bold transition-all flex items-center gap-4 px-5 ${filterType === chip.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
+                    >
+                      <chip.icon className={`w-4 h-4 ${filterType === chip.id ? 'text-white' : 'text-gray-400'}`} />
+                      {chip.label}
+                      {filterType === chip.id && <Check className="w-4 h-4 ml-auto" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {filterType === 'custom' && (
+                <div className="space-y-3 animate-in slide-in-from-top-2 duration-200">
+                  <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-2">Enter Extension</p>
+                  <div className="relative">
+                    <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input 
+                      autoFocus
+                      type="text"
+                      placeholder="e.g. rar, zip, iso..."
+                      className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-gray-800"
+                      value={customExt}
+                      onChange={(e) => setCustomExt(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <button 
+                onClick={() => setIsFilterMenuOpen(false)}
+                className="w-full py-5 bg-gray-900 text-white rounded-[2rem] font-black text-sm active:scale-[0.98] transition-all shadow-xl shadow-gray-200 mt-4"
+              >
+                Show Results
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sort Menu Overlay */}
       {isSortMenuOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center">
@@ -322,7 +453,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
             
             <h3 className="text-xl font-black text-gray-900 mb-8 px-2 flex items-center gap-3">
               <ArrowUpDown className="w-6 h-6 text-indigo-600" />
-              Display Options
+              Sort Options
             </h3>
 
             <div className="space-y-6">

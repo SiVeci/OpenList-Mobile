@@ -12,7 +12,10 @@ import {
   ExternalLink as ExtIcon,
   Maximize,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  Settings,
+  Check,
+  ChevronRight
 } from 'lucide-react';
 import FileIcon from './FileIcon';
 import PreviewModal from './PreviewModal';
@@ -25,6 +28,8 @@ interface Props {
   onRefresh: () => void;
 }
 
+type PlayerType = 'vlc' | 'mx' | 'nplayer';
+
 const ActionSheet: React.FC<Props> = ({ file, path, config, onClose, onRefresh }) => {
   const [rawUrl, setRawUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,6 +37,12 @@ const ActionSheet: React.FC<Props> = ({ file, path, config, onClose, onRefresh }
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  
+  // Player Settings State - Defaulted to 'nplayer' as requested
+  const [preferredPlayer, setPreferredPlayer] = useState<PlayerType>(() => {
+    return (localStorage.getItem('openlist_pref_player') as PlayerType) || 'nplayer';
+  });
+  const [showPlayerPicker, setShowPlayerPicker] = useState(false);
 
   useEffect(() => {
     const fetchLink = async () => {
@@ -55,7 +66,7 @@ const ActionSheet: React.FC<Props> = ({ file, path, config, onClose, onRefresh }
     }
   };
 
-  const handleExternalPlayer = (player: 'vlc' | 'mx' | 'nplayer') => {
+  const handleExternalPlayer = (player: PlayerType) => {
     if (!rawUrl) return;
     let url = '';
     
@@ -65,6 +76,12 @@ const ActionSheet: React.FC<Props> = ({ file, path, config, onClose, onRefresh }
       case 'nplayer': url = `nplayer-${rawUrl}`; break;
     }
     window.location.href = url;
+  };
+
+  const selectPlayer = (player: PlayerType) => {
+    setPreferredPlayer(player);
+    localStorage.setItem('openlist_pref_player', player);
+    setShowPlayerPicker(false);
   };
 
   const executeDelete = async () => {
@@ -86,10 +103,19 @@ const ActionSheet: React.FC<Props> = ({ file, path, config, onClose, onRefresh }
   const ext = file.name.split('.').pop()?.toLowerCase() || '';
   const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
   const isPdf = ext === 'pdf';
-  const isText = ['txt', 'md', 'json', 'yaml', 'yml', 'js', 'ts', 'py', 'css', 'html', 'conf', 'ini', 'log'].includes(ext);
+  const isText = [
+    'txt', 'md', 'json', 'yaml', 'yml', 'js', 'ts', 'py', 'css', 'html', 'conf', 'ini', 'log',
+    'tsx', 'jsx', 'sh', 'sql', 'xml', 'csv', 'go', 'c', 'cpp', 'java'
+  ].includes(ext);
   const isVideo = ['mp4', 'mkv', 'avi', 'mov', 'flv', 'wmv', 'rmvb'].includes(ext);
 
   const canPreview = isImage || isText || isPdf;
+
+  const playerNames = {
+    'vlc': 'VLC',
+    'mx': 'MX Player',
+    'nplayer': 'Nplayer'
+  };
 
   return (
     <>
@@ -149,71 +175,88 @@ const ActionSheet: React.FC<Props> = ({ file, path, config, onClose, onRefresh }
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-4">
-                {/* Actions */}
-                {canPreview ? (
-                  <button 
-                    onClick={() => setShowPreview(true)}
-                    className="flex flex-col items-center justify-center p-4 bg-indigo-600 text-white rounded-2xl gap-2 hover:bg-indigo-700 transition-colors col-span-2 shadow-lg shadow-indigo-100"
-                  >
-                    <Eye className="w-6 h-6" />
-                    <span className="text-sm font-semibold">Preview Now</span>
-                  </button>
-                ) : isVideo ? (
-                  <button 
-                    onClick={() => handleExternalPlayer('nplayer')}
-                    className="flex flex-col items-center justify-center p-4 bg-indigo-600 text-white rounded-2xl gap-2 hover:bg-indigo-700 transition-colors col-span-2 shadow-lg shadow-indigo-100"
-                  >
-                    <Maximize className="w-6 h-6" />
-                    <span className="text-sm font-semibold">Play in NPlayer</span>
-                  </button>
-                ) : null}
-
-                <a 
-                  href={rawUrl || '#'} 
-                  download={file.name}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={`flex flex-col items-center justify-center p-4 bg-gray-50 text-gray-700 rounded-2xl gap-2 hover:bg-gray-100 transition-colors ${!(canPreview || isVideo) ? 'col-span-2' : ''}`}
-                >
-                  <Download className="w-6 h-6" />
-                  <span className="text-sm font-semibold">Download</span>
-                </a>
-
-                <button 
-                  onClick={handleCopyLink}
-                  className="flex flex-col items-center justify-center p-4 bg-gray-50 text-gray-700 rounded-2xl gap-2 hover:bg-gray-100 transition-colors"
-                >
-                  <LinkIcon className="w-6 h-6" />
-                  <span className="text-sm font-semibold">Copy Link</span>
-                </button>
-
-                {isVideo && (
-                  <>
+              <div className="space-y-4">
+                {/* Header Action Button */}
+                <div className="relative">
+                  {isVideo ? (
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => handleExternalPlayer(preferredPlayer)}
+                        className="flex-1 flex flex-col items-center justify-center p-4 bg-indigo-600 text-white rounded-2xl gap-2 hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
+                      >
+                        <Play className="w-6 h-6" />
+                        <span className="text-sm font-semibold">Preview in {playerNames[preferredPlayer]}</span>
+                      </button>
+                      <button 
+                        onClick={() => setShowPlayerPicker(!showPlayerPicker)}
+                        className={`p-4 rounded-2xl transition-all border ${showPlayerPicker ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-gray-50 border-transparent text-gray-400 hover:bg-gray-100'}`}
+                        title="Player Settings"
+                      >
+                        <Settings className="w-6 h-6" />
+                      </button>
+                    </div>
+                  ) : canPreview ? (
                     <button 
-                      onClick={() => handleExternalPlayer('mx')}
-                      className="flex flex-col items-center justify-center p-4 bg-blue-50 text-blue-700 rounded-2xl gap-2 hover:bg-blue-100 transition-colors"
+                      onClick={() => setShowPreview(true)}
+                      className="w-full flex flex-col items-center justify-center p-4 bg-indigo-600 text-white rounded-2xl gap-2 hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
                     >
-                      <ExtIcon className="w-6 h-6" />
-                      <span className="text-sm font-semibold">MX Player</span>
+                      <Eye className="w-6 h-6" />
+                      <span className="text-sm font-semibold">Preview Now</span>
                     </button>
-                    <button 
-                      onClick={() => handleExternalPlayer('vlc')}
-                      className="flex flex-col items-center justify-center p-4 bg-teal-50 text-teal-700 rounded-2xl gap-2 hover:bg-teal-100 transition-colors"
-                    >
-                      <Play className="w-6 h-6" />
-                      <span className="text-sm font-semibold">VLC</span>
-                    </button>
-                  </>
-                )}
+                  ) : null}
 
-                <button 
-                  onClick={() => setConfirmDelete(true)}
-                  className="flex flex-col items-center justify-center p-4 bg-red-50 text-red-700 rounded-2xl gap-2 hover:bg-red-100 transition-colors col-span-2"
-                >
-                  <Trash2 className="w-6 h-6" />
-                  <span className="text-sm font-semibold">Delete File</span>
-                </button>
+                  {/* Player Picker Overlay */}
+                  {showPlayerPicker && (
+                    <div className="mt-3 bg-gray-50 rounded-2xl border border-gray-100 p-2 space-y-1 animate-in slide-in-from-top-2 duration-200">
+                      <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest px-3 py-2">Preferred Video Player</p>
+                      {(['vlc', 'mx', 'nplayer'] as PlayerType[]).map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => selectPlayer(p)}
+                          className={`w-full flex items-center justify-between p-3 rounded-xl text-sm font-bold transition-all ${preferredPlayer === p ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:bg-white/50'}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            {p === 'vlc' && <Play className="w-4 h-4" />}
+                            {p === 'mx' && <ExtIcon className="w-4 h-4" />}
+                            {p === 'nplayer' && <Maximize className="w-4 h-4" />}
+                            {playerNames[p]}
+                          </div>
+                          {preferredPlayer === p && <Check className="w-4 h-4" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Secondary Actions Grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  <a 
+                    href={rawUrl || '#'} 
+                    download={file.name}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`flex flex-col items-center justify-center p-4 bg-gray-50 text-gray-700 rounded-2xl gap-2 hover:bg-gray-100 transition-colors ${!(canPreview || isVideo) ? 'col-span-2' : ''}`}
+                  >
+                    <Download className="w-6 h-6" />
+                    <span className="text-sm font-semibold">Download</span>
+                  </a>
+
+                  <button 
+                    onClick={handleCopyLink}
+                    className="flex flex-col items-center justify-center p-4 bg-gray-50 text-gray-700 rounded-2xl gap-2 hover:bg-gray-100 transition-colors"
+                  >
+                    <LinkIcon className="w-6 h-6" />
+                    <span className="text-sm font-semibold">Copy Link</span>
+                  </button>
+
+                  <button 
+                    onClick={() => setConfirmDelete(true)}
+                    className="flex flex-col items-center justify-center p-4 bg-red-50 text-red-700 rounded-2xl gap-2 hover:bg-red-100 transition-colors col-span-2"
+                  >
+                    <Trash2 className="w-6 h-6" />
+                    <span className="text-sm font-semibold">Delete File</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
