@@ -1,6 +1,5 @@
 # 📂 OpenList Mobile
-- 支持Alist/OpenList 服务器
-  SUPPORT ALIST AND OPENLIST SERVERS
+- 支持Alist/OpenList 服务器 Support Alist and OpenList servers
 
 ---
 
