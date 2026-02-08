@@ -365,7 +365,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
         </form>
 
         <p className="text-center text-[9px] text-gray-300 mt-5 font-bold uppercase tracking-[0.2em]">
-          ·V0.1.2
+          ·V0.1.3
         </p>
 
         {/* Delete Confirmation Overlay */}
