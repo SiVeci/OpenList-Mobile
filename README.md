@@ -11,7 +11,7 @@
   **Smart Sorting:** Folders-first logic with flexible sorting options.
 - **文件过滤：** 一键筛选视频、图片、文档 or 自定义后缀名。  
   **Filtering:** Quick filters for videos, images, documents, or custom extensions.
-- **基础操作：** 支持文件上传、删除（带确认弹窗）及重命名。  
+- **基础操作：** 支持文件多选，上传、下载、删除（带确认弹窗）。  
   **Core Ops:** Secure upload, deletion, and basic file management.
 
 ### 🎥 预览播放 / Media & Preview
@@ -28,8 +28,8 @@
 
 1. **访问地址：** 在移动端浏览器中打开本项目部署链接.
    **Access:** Open the app URL in your mobile browser.
-2. **连接配置：** 输入 AList 服务器地址（含端口）、用户名及密码.
-   **Connect:** Enter your AList URL, username, and password.
+2. **连接配置：** 输入 Alist/OpenList 服务器地址（含端口）、用户名及密码.
+   **Connect:** Enter your Alist/OpenList URL, username, and password.
 3. **安全体验：** 登录后服务器信息将安全保存在本地.
    **Enjoy:** Your configuration is saved locally for quick access.
 
