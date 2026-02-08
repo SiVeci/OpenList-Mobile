@@ -1,4 +1,6 @@
 # 📂 OpenList Mobile
+- 支持Alist/OpenList 服务器
+  SUPPORT ALIST AND OPENLIST SERVERS
 
 ---
 
@@ -43,4 +45,3 @@
   **CORS:** Set `Allow Origins` to `*` or your domain in Alist/OpenList settings.
 
 ---
-*Developed for the AList Community.*
