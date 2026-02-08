@@ -276,6 +276,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     touchStartPos.current = { x: e.clientX, y: e.clientY };
     touchStartTime.current = Date.now();
 
+    // Set 800ms timer for long press activation (slightly shorter for better feel)
     longPressTimer.current = window.setTimeout(() => {
       if (!isSelectionMode) {
         setIsSelectionMode(true);
@@ -283,7 +284,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
         wasLongPress.current = true;
         if ('vibrate' in navigator) navigator.vibrate(50);
       }
-    }, 1000);
+    }, 800);
   };
 
   const handlePointerUp = () => {
@@ -296,6 +297,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   const handlePointerMove = (e: React.PointerEvent) => {
     const deltaX = Math.abs(e.clientX - touchStartPos.current.x);
     const deltaY = Math.abs(e.clientY - touchStartPos.current.y);
+    // If moved more than 10px, it's a scroll/swipe, cancel long press
     if (deltaX > 10 || deltaY > 10) {
       if (longPressTimer.current) {
         clearTimeout(longPressTimer.current);
@@ -323,6 +325,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   };
 
   const handleItemClick = (file: AListFile) => {
+    // If it was a long press, the action is already handled in the timer
     if (wasLongPress.current) {
       wasLongPress.current = false;
       return;
@@ -481,7 +484,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       )}
 
       {/* File List */}
-      <div className="flex-1 overflow-y-auto px-4 pt-2 pb-32 touch-pan-y">
+      <div className="flex-1 overflow-y-auto px-4 pt-2 pb-32 scroll-smooth">
         {loading ? (
           <div className="h-60 flex flex-col items-center justify-center gap-3">
             <div className="w-10 h-10 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
@@ -509,7 +512,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                 onPointerMove={handlePointerMove}
                 onClick={() => handleItemClick(file)}
                 className={`
-                  relative group transition-all active:scale-[0.96] overflow-hidden select-none touch-none
+                  relative group transition-all active:scale-[0.96] overflow-hidden select-none
                   ${viewMode === 'list' 
                     ? 'flex items-center gap-4 p-3 rounded-[1.5rem] border transition-colors shadow-sm' 
                     : 'flex flex-col items-center p-3 rounded-[1.5rem] border transition-colors shadow-sm'
@@ -519,6 +522,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                     : 'bg-white border-transparent hover:border-indigo-100'
                   }
                 `}
+                style={{ touchAction: 'pan-y' }}
               >
                 {isSelectionMode && (
                   <div className={`absolute top-2 left-2 z-10 transition-transform ${selectedItemNames.has(file.name) ? 'scale-100' : 'scale-0'}`}>
