@@ -33,7 +33,8 @@ import {
   CheckSquare,
   Square,
   Download,
-  ArrowDown
+  ArrowDown,
+  Info
 } from 'lucide-react';
 
 interface Props {
@@ -60,7 +61,9 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   // Pull-to-refresh state
   const [pullDistance, setPullDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const PULL_THRESHOLD = 70;
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const PULL_THRESHOLD = 80;
+  const MAX_PULL = 110;
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Selection State
@@ -88,6 +91,14 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   const serviceRef = useRef(new AListService(config));
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Toast Timer
+  useEffect(() => {
+    if (toastMsg) {
+      const timer = setTimeout(() => setToastMsg(null), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMsg]);
+
   // Persistence Effects
   useEffect(() => {
     localStorage.setItem('alist_sort_key', sortKey);
@@ -101,6 +112,9 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     try {
       const response = await serviceRef.current.listFiles(currentPath, 1, 100, forceRefresh);
       setFiles(response.data.content || []);
+      if (forceRefresh) {
+        setToastMsg("List updated from server");
+      }
     } catch (err: any) {
       if (err.message.includes('Unauthorized')) {
         onSessionExpired();
@@ -329,16 +343,20 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     const deltaY = currentY - touchStartPos.current.y;
     const deltaX = Math.abs(currentX - touchStartPos.current.x);
 
-    // Only allow pull-to-refresh if pulling down at the top
+    // Trigger pull if vertical move is greater than horizontal
     if (deltaY > 0 && deltaY > deltaX) {
-      // Apply damping effect
-      const dampedDistance = Math.pow(deltaY, 0.8);
-      setPullDistance(Math.min(dampedDistance, 120));
+      // Damping and thresholding
+      let dampedDistance = deltaY * 0.5;
       
-      // Prevent browser default refresh/overscroll
-      if (deltaY > 5 && e.cancelable) {
-        e.preventDefault();
+      // Lock movement once we hit MAX_PULL to prevent excessive scrolling
+      if (dampedDistance > MAX_PULL) {
+        dampedDistance = MAX_PULL + (dampedDistance - MAX_PULL) * 0.1;
       }
+      
+      setPullDistance(dampedDistance);
+      
+      // Block native scrolling
+      if (e.cancelable) e.preventDefault();
     } else {
       setPullDistance(0);
     }
@@ -360,7 +378,8 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     // Process pull-to-refresh
     if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
       setIsRefreshing(true);
-      setPullDistance(PULL_THRESHOLD);
+      setPullDistance(PULL_THRESHOLD - 20); // Hold position slightly above threshold
+      setToastMsg("Refreshing directory...");
       fetchFiles(path, true);
     } else {
       setPullDistance(0);
@@ -440,21 +459,27 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     >
       {/* Pull-to-refresh Indicator */}
       <div 
-        className="absolute left-0 right-0 flex justify-center z-50 pointer-events-none transition-all duration-200 ease-out"
+        className="absolute left-0 right-0 flex justify-center z-50 pointer-events-none transition-all duration-300 ease-out"
         style={{ 
           top: 0, 
-          transform: `translateY(${Math.max(pullDistance - 40, -40)}px)`,
+          transform: `translateY(${Math.max(pullDistance - 50, -50)}px)`,
           opacity: pullDistance > 10 ? 1 : 0
         }}
       >
-        <div className="bg-white rounded-full p-2.5 shadow-xl border border-gray-100 text-indigo-600">
+        <div className={`
+          flex items-center gap-2 bg-white rounded-full px-4 py-2 shadow-xl border border-gray-100 transition-all
+          ${pullDistance >= PULL_THRESHOLD ? 'ring-2 ring-indigo-500 ring-offset-2' : ''}
+        `}>
           <RefreshCw 
-            className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} 
+            className={`w-5 h-5 transition-colors ${isRefreshing ? 'animate-spin text-indigo-600' : pullDistance >= PULL_THRESHOLD ? 'text-indigo-600' : 'text-gray-400'}`} 
             style={{ 
-              transform: isRefreshing ? undefined : `rotate(${pullDistance * 4}deg)`,
+              transform: isRefreshing ? undefined : `rotate(${pullDistance * 4.5}deg)`,
               transition: isRefreshing ? undefined : 'none'
             }} 
           />
+          {pullDistance >= PULL_THRESHOLD && !isRefreshing && (
+            <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest animate-in slide-in-from-right-1">Release to Refresh</span>
+          )}
         </div>
       </div>
 
@@ -549,8 +574,8 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       {/* File List */}
       <div 
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto px-4 pt-2 pb-32 scroll-smooth transition-transform duration-200 ease-out"
-        style={{ transform: pullDistance > 0 ? `translateY(${pullDistance * 0.5}px)` : undefined }}
+        className="flex-1 overflow-y-auto px-4 pt-2 pb-32 scroll-smooth transition-transform duration-300 ease-out"
+        style={{ transform: pullDistance > 0 ? `translateY(${pullDistance * 0.7}px)` : undefined }}
       >
         {loading && !isRefreshing ? (
           <div className="h-60 flex flex-col items-center justify-center gap-3">
@@ -643,6 +668,16 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
           </div>
         )}
       </div>
+
+      {/* Global Toast for Actions */}
+      {toastMsg && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-bottom-4 duration-300">
+          <div className="bg-gray-900/90 backdrop-blur-md text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-white/10">
+            <Info className="w-4 h-4 text-indigo-400" />
+            <span className="text-[11px] font-black uppercase tracking-widest">{toastMsg}</span>
+          </div>
+        </div>
+      )}
 
       {/* Multi-Select Action Bar */}
       {isSelectionMode && (
