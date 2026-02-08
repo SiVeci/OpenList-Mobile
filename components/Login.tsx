@@ -129,7 +129,9 @@ const Login: React.FC<Props> = ({ onLogin }) => {
     const cleanAddress = address.trim().replace(/\/$/, "");
     const cleanPort = port.trim();
     const targetUrl = `${protocol}${cleanAddress}${cleanPort ? `:${cleanPort}` : ''}`;
-    const finalServerName = serverName.trim() || 'OpenList';
+    
+    const userProvidedNickname = serverName.trim();
+    const finalServerName = userProvidedNickname || 'Server';
 
     if (!cleanAddress) {
       setError({ message: "Please enter a server address." });
@@ -141,15 +143,18 @@ const Login: React.FC<Props> = ({ onLogin }) => {
       const token = await AListService.login(targetUrl, username, password);
       const newConfig: ServerConfig = { url: targetUrl, username, token, serverName: finalServerName };
       
-      const existing = savedConfigs.findIndex(c => c.url === targetUrl && c.username === username);
-      let updatedHistory = [...savedConfigs];
-      if (existing !== -1) {
-        updatedHistory[existing] = newConfig;
-      } else {
-        updatedHistory.unshift(newConfig);
+      // Requirement: Only save to login history if a nickname was actually provided
+      if (userProvidedNickname) {
+        const existing = savedConfigs.findIndex(c => c.url === targetUrl && c.username === username);
+        let updatedHistory = [...savedConfigs];
+        if (existing !== -1) {
+          updatedHistory[existing] = newConfig;
+        } else {
+          updatedHistory.unshift(newConfig);
+        }
+        updatedHistory = updatedHistory.slice(0, 5);
+        localStorage.setItem('alist_login_history', JSON.stringify(updatedHistory));
       }
-      updatedHistory = updatedHistory.slice(0, 5);
-      localStorage.setItem('alist_login_history', JSON.stringify(updatedHistory));
       
       onLogin(newConfig);
     } catch (err: any) {
@@ -365,7 +370,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
         </form>
 
         <p className="text-center text-[9px] text-gray-300 mt-5 font-bold uppercase tracking-[0.2em]">
-          ·V0.1.2
+          ·V0.1.3
         </p>
 
         {/* Delete Confirmation Overlay */}

@@ -191,6 +191,14 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     return result;
   }, [files, searchQuery, sortKey, sortOrder, foldersFirst, filterType, customExt]);
 
+  // Folder detection for batch operations
+  const hasFolderSelected = useMemo(() => {
+    return Array.from(selectedItemNames).some(name => {
+      const file = files.find(f => f.name === name);
+      return file?.is_dir;
+    });
+  }, [selectedItemNames, files]);
+
   const handleNavigate = (newPath: string) => {
     setPath(newPath);
     setSearchQuery('');
@@ -325,6 +333,50 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       handleNavigate((path === '/' ? '' : path) + '/' + file.name);
     } else {
       setSelectedFile({ file, path: (path === '/' ? '' : path) + '/' + file.name });
+    }
+  };
+
+  const handleBatchDownload = async () => {
+    if (hasFolderSelected) return;
+    setBatchActionLoading(true);
+    setToastMsg("Starting batch download...");
+    try {
+      for (const name of selectedItemNames) {
+        const detail = await serviceRef.current.getFileDetail((path === '/' ? '' : path) + '/' + name);
+        const a = document.createElement('a');
+        a.href = detail.data.raw_url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        await new Promise(r => setTimeout(r, 600));
+      }
+      setIsSelectionMode(false);
+      setSelectedItemNames(new Set());
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setBatchActionLoading(false);
+    }
+  };
+
+  const handleBatchCopyLinks = async () => {
+    if (hasFolderSelected) return;
+    setBatchActionLoading(true);
+    try {
+      const links = [];
+      for (const name of selectedItemNames) {
+        const detail = await serviceRef.current.getFileDetail((path === '/' ? '' : path) + '/' + name);
+        links.push(detail.data.raw_url);
+      }
+      await navigator.clipboard.writeText(links.join('\n'));
+      setToastMsg(`Copied ${links.length} links to clipboard`);
+      setIsSelectionMode(false);
+      setSelectedItemNames(new Set());
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setBatchActionLoading(false);
     }
   };
 
@@ -568,24 +620,45 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       {/* Batch Selection Bar */}
       {isSelectionMode && (
         <div className="fixed bottom-8 left-6 right-6 z-50 animate-in slide-in-from-bottom-6 duration-400">
-          <div className="w-full bg-gray-900 text-white rounded-[2.2rem] p-4.5 shadow-2xl flex items-center justify-between border border-white/5 backdrop-blur-lg">
-             <div className="flex items-center gap-3.5 ml-2">
+          <div className="w-full bg-gray-900 text-white rounded-[2.2rem] p-4 shadow-2xl flex items-center justify-between border border-white/5 backdrop-blur-lg">
+             <div className="flex items-center gap-3.5 ml-1">
                 <button onClick={() => {setIsSelectionMode(false); setSelectedItemNames(new Set());}} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X className="w-5 h-5" /></button>
                 <div className="flex flex-col"><span className="text-sm font-black tracking-tight">{selectedItemNames.size}</span><span className="text-[8px] text-gray-400 font-bold uppercase tracking-[0.2em]">Selected</span></div>
              </div>
-             <div className="flex gap-2.5">
-                <button onClick={async () => {
-                   setBatchActionLoading(true); try {
-                     for (const name of selectedItemNames) {
-                       const detail = await serviceRef.current.getFileDetail((path === '/' ? '' : path) + '/' + name);
-                       const a = document.createElement('a'); a.href = detail.data.raw_url; a.download = name; a.click(); await new Promise(r => setTimeout(r, 600));
-                     }
-                     setIsSelectionMode(false); setSelectedItemNames(new Set());
-                   } catch (err: any) { setErrorMsg(err.message); } finally { setBatchActionLoading(false); }
-                }} className="p-3.5 bg-white/10 rounded-[1.2rem] hover:bg-white/20 transition-colors"><Download className="w-5 h-5" /></button>
-                <button onClick={() => setShowBatchDeleteConfirm(true)} className="p-3.5 bg-red-600 rounded-[1.2rem] hover:bg-red-500 shadow-lg shadow-red-900/20 transition-colors"><Trash2 className="w-5 h-5" /></button>
+             <div className="flex gap-1.5">
+                <button 
+                  onClick={handleBatchDownload}
+                  disabled={batchActionLoading || hasFolderSelected}
+                  className={`p-3.5 rounded-[1.2rem] transition-all active:scale-95 ${hasFolderSelected ? 'bg-gray-800 text-gray-600' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                  title="Batch Download"
+                >
+                  <Download className="w-5 h-5" />
+                </button>
+                <button 
+                  onClick={handleBatchCopyLinks}
+                  disabled={batchActionLoading || hasFolderSelected}
+                  className={`p-3.5 rounded-[1.2rem] transition-all active:scale-95 ${hasFolderSelected ? 'bg-gray-800 text-gray-600' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                  title="Batch Copy Links"
+                >
+                  <Copy className="w-5 h-5" />
+                </button>
+                <button 
+                  onClick={() => setShowBatchDeleteConfirm(true)} 
+                  disabled={batchActionLoading}
+                  className="p-3.5 bg-red-600 text-white rounded-[1.2rem] hover:bg-red-500 shadow-lg shadow-red-900/20 transition-all active:scale-95"
+                  title="Batch Delete"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
              </div>
           </div>
+          {hasFolderSelected && (
+            <div className="mt-2 text-center">
+              <span className="text-[9px] font-black text-orange-400 uppercase tracking-widest bg-gray-900/50 backdrop-blur px-3 py-1 rounded-full border border-orange-900/20">
+                Folders included: Batch download/link disabled
+              </span>
+            </div>
+          )}
         </div>
       )}
 
