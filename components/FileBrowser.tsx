@@ -32,7 +32,8 @@ import {
   Copy,
   CheckSquare,
   Square,
-  Download
+  Download,
+  ArrowDown
 } from 'lucide-react';
 
 interface Props {
@@ -56,6 +57,12 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   
+  // Pull-to-refresh state
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const PULL_THRESHOLD = 70;
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   // Selection State
   const [selectedItemNames, setSelectedItemNames] = useState<Set<string>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -76,6 +83,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   const touchStartTime = useRef(0);
   const longPressTimer = useRef<number | null>(null);
   const wasLongPress = useRef(false);
+  const isPulling = useRef(false);
   
   const serviceRef = useRef(new AListService(config));
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -101,6 +109,8 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       console.error(err);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
+      setPullDistance(0);
     }
   }, [onSessionExpired]);
 
@@ -276,7 +286,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     touchStartPos.current = { x: e.clientX, y: e.clientY };
     touchStartTime.current = Date.now();
 
-    // Set 800ms timer for long press activation (slightly shorter for better feel)
     longPressTimer.current = window.setTimeout(() => {
       if (!isSelectionMode) {
         setIsSelectionMode(true);
@@ -297,7 +306,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   const handlePointerMove = (e: React.PointerEvent) => {
     const deltaX = Math.abs(e.clientX - touchStartPos.current.x);
     const deltaY = Math.abs(e.clientY - touchStartPos.current.y);
-    // If moved more than 10px, it's a scroll/swipe, cancel long press
     if (deltaX > 10 || deltaY > 10) {
       if (longPressTimer.current) {
         clearTimeout(longPressTimer.current);
@@ -310,6 +318,30 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     if (e.touches.length !== 1) return;
     touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     touchStartTime.current = Date.now();
+    isPulling.current = scrollContainerRef.current?.scrollTop === 0;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1 || !isPulling.current || isRefreshing || isSelectionMode) return;
+    
+    const currentY = e.touches[0].clientY;
+    const currentX = e.touches[0].clientX;
+    const deltaY = currentY - touchStartPos.current.y;
+    const deltaX = Math.abs(currentX - touchStartPos.current.x);
+
+    // Only allow pull-to-refresh if pulling down at the top
+    if (deltaY > 0 && deltaY > deltaX) {
+      // Apply damping effect
+      const dampedDistance = Math.pow(deltaY, 0.8);
+      setPullDistance(Math.min(dampedDistance, 120));
+      
+      // Prevent browser default refresh/overscroll
+      if (deltaY > 5 && e.cancelable) {
+        e.preventDefault();
+      }
+    } else {
+      setPullDistance(0);
+    }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
@@ -318,14 +350,25 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     const deltaY = e.changedTouches[0].clientY - touchStartPos.current.y;
     const duration = Date.now() - touchStartTime.current;
 
-    // Detect edge swipe back (Only when NOT in selection mode)
+    // Detect edge swipe back
     if (!isSelectionMode && touchStartPos.current.x < 40 && deltaX > 100 && Math.abs(deltaX) > Math.abs(deltaY) * 2 && duration < 500) {
       goBack();
+      setPullDistance(0);
+      return;
     }
+
+    // Process pull-to-refresh
+    if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
+      setIsRefreshing(true);
+      setPullDistance(PULL_THRESHOLD);
+      fetchFiles(path, true);
+    } else {
+      setPullDistance(0);
+    }
+    isPulling.current = false;
   };
 
   const handleItemClick = (file: AListFile) => {
-    // If it was a long press, the action is already handled in the timer
     if (wasLongPress.current) {
       wasLongPress.current = false;
       return;
@@ -392,12 +435,32 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       className="h-full flex flex-col bg-[#f7f2fa] relative overflow-hidden"
       style={{ touchAction: 'pan-y' }}
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
+      {/* Pull-to-refresh Indicator */}
+      <div 
+        className="absolute left-0 right-0 flex justify-center z-50 pointer-events-none transition-all duration-200 ease-out"
+        style={{ 
+          top: 0, 
+          transform: `translateY(${Math.max(pullDistance - 40, -40)}px)`,
+          opacity: pullDistance > 10 ? 1 : 0
+        }}
+      >
+        <div className="bg-white rounded-full p-2.5 shadow-xl border border-gray-100 text-indigo-600">
+          <RefreshCw 
+            className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} 
+            style={{ 
+              transform: isRefreshing ? undefined : `rotate(${pullDistance * 4}deg)`,
+              transition: isRefreshing ? undefined : 'none'
+            }} 
+          />
+        </div>
+      </div>
+
       {/* Search & Toolbar Area */}
       <div className="bg-white border-b border-gray-100 z-10 shadow-sm">
         <div className="px-4 py-3 flex gap-2 items-center">
-          {/* Select All Button - Appears on the left only in selection mode */}
           {isSelectionMode && (
             <button 
               onClick={selectAll}
@@ -484,8 +547,12 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       )}
 
       {/* File List */}
-      <div className="flex-1 overflow-y-auto px-4 pt-2 pb-32 scroll-smooth">
-        {loading ? (
+      <div 
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto px-4 pt-2 pb-32 scroll-smooth transition-transform duration-200 ease-out"
+        style={{ transform: pullDistance > 0 ? `translateY(${pullDistance * 0.5}px)` : undefined }}
+      >
+        {loading && !isRefreshing ? (
           <div className="h-60 flex flex-col items-center justify-center gap-3">
             <div className="w-10 h-10 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
             <span className="text-sm text-gray-400 font-bold uppercase tracking-widest">Scanning...</span>
@@ -595,7 +662,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
               </div>
 
               <div className="flex gap-2">
-                {/* Download Button */}
                 <button 
                   onClick={handleBatchDownload}
                   disabled={batchActionLoading || hasFolderSelected || selectedItemNames.size === 0}
@@ -605,7 +671,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                   {batchActionLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
                 </button>
 
-                {/* Copy Links Button */}
                 <button 
                   onClick={handleBatchCopyLinks}
                   disabled={batchActionLoading || hasFolderSelected || selectedItemNames.size === 0}
@@ -615,7 +680,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                   {batchActionLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Copy className="w-5 h-5" />}
                 </button>
 
-                {/* Delete Button */}
                 <button 
                   onClick={() => setShowBatchDeleteConfirm(true)}
                   disabled={batchActionLoading || selectedItemNames.size === 0}
@@ -637,7 +701,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
         </div>
       )}
 
-      {/* Batch Delete Confirmation Overlay */}
+      {/* Overlays ... (Batch Delete, Filter, Sort, FAB) */}
       {showBatchDeleteConfirm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-[2.5rem] p-8 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
@@ -668,18 +732,15 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
         </div>
       )}
 
-      {/* Filter Menu Overlay */}
       {isFilterMenuOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-in fade-in" onClick={() => setIsFilterMenuOpen(false)} />
           <div className="relative w-full max-w-lg bg-white rounded-t-[3rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 pb-safe">
             <div className="w-12 h-1.5 bg-gray-100 rounded-full mx-auto mb-8" />
-            
             <h3 className="text-xl font-black text-gray-900 mb-8 px-2 flex items-center gap-3">
               <Filter className="w-6 h-6 text-indigo-600" />
               Filter Files
             </h3>
-
             <div className="space-y-6">
               <div className="space-y-3">
                 <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-2">Select Category</p>
@@ -697,7 +758,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                   ))}
                 </div>
               </div>
-
               {filterType === 'custom' && (
                 <div className="space-y-3 animate-in slide-in-from-top-2 duration-200">
                   <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-2">Enter Extension</p>
@@ -714,7 +774,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                   </div>
                 </div>
               )}
-
               <button 
                 onClick={() => setIsFilterMenuOpen(false)}
                 className="w-full py-5 bg-gray-900 text-white rounded-[2rem] font-black text-sm active:scale-[0.98] transition-all shadow-xl shadow-gray-200 mt-4"
@@ -726,20 +785,16 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
         </div>
       )}
 
-      {/* Sort Menu Overlay */}
       {isSortMenuOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-in fade-in" onClick={() => setIsSortMenuOpen(false)} />
           <div className="relative w-full max-w-lg bg-white rounded-t-[3rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 pb-safe">
             <div className="w-12 h-1.5 bg-gray-100 rounded-full mx-auto mb-8" />
-            
             <h3 className="text-xl font-black text-gray-900 mb-8 px-2 flex items-center gap-3">
               <ArrowUpDown className="w-6 h-6 text-indigo-600" />
               Sort Options
             </h3>
-
             <div className="space-y-6">
-              {/* Sort By Section */}
               <div className="space-y-3">
                 <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-2">Sort Files By</p>
                 <div className="grid grid-cols-3 gap-2">
@@ -759,8 +814,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                   ))}
                 </div>
               </div>
-
-              {/* Order Section */}
               <div className="space-y-3">
                 <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-2">Sort Direction</p>
                 <div className="flex gap-2">
@@ -768,20 +821,16 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                     onClick={() => setSortOrder('asc')}
                     className={`flex-1 py-4 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${sortOrder === 'asc' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-gray-50 text-gray-500 border border-transparent'}`}
                   >
-                    <ArrowUpNarrowWide className="w-4 h-4" />
-                    Ascending
+                    <ArrowUpNarrowWide className="w-4 h-4" /> Ascending
                   </button>
                   <button
                     onClick={() => setSortOrder('desc')}
                     className={`flex-1 py-4 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${sortOrder === 'desc' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-gray-50 text-gray-500 border border-transparent'}`}
                   >
-                    <ArrowDownWideNarrow className="w-4 h-4" />
-                    Descending
+                    <ArrowDownWideNarrow className="w-4 h-4" /> Descending
                   </button>
                 </div>
               </div>
-
-              {/* Toggles */}
               <div className="space-y-3 pt-4">
                 <div 
                   onClick={() => setFoldersFirst(!foldersFirst)}
@@ -801,7 +850,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                   </div>
                 </div>
               </div>
-
               <button 
                 onClick={() => setIsSortMenuOpen(false)}
                 className="w-full py-5 bg-gray-900 text-white rounded-[2rem] font-black text-sm active:scale-[0.98] transition-all shadow-xl shadow-gray-200 mt-4"
@@ -813,7 +861,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
         </div>
       )}
 
-      {/* FAB Container */}
       {!isSelectionMode && (
         <div className="fixed bottom-6 right-6 flex flex-col gap-4 z-30 pb-safe">
           <button 
@@ -827,7 +874,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
         </div>
       )}
 
-      {/* Back Button */}
       {path !== '/' && !isSelectionMode && (
         <button 
           onClick={goBack}
@@ -837,7 +883,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
         </button>
       )}
 
-      {/* Status Overlay */}
       {uploading && (
         <div className="fixed bottom-24 right-6 bg-indigo-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 z-40 mb-safe animate-bounce">
           <Upload className="w-4 h-4" />
