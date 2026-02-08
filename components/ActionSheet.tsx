@@ -90,7 +90,10 @@ const ActionSheet: React.FC<Props> = ({ file, path, config, onClose, onRefresh }
     setError(null);
     try {
       const service = new AListService(config);
-      await service.deleteFile(path);
+      const lastSlashIndex = path.lastIndexOf('/');
+      const dir = path.substring(0, lastSlashIndex) || '/';
+      const name = path.substring(lastSlashIndex + 1);
+      await service.deleteFiles(dir, [name]);
       onRefresh();
       onClose();
     } catch (err: any) {

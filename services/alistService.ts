@@ -129,21 +129,12 @@ export class AListService {
     return res;
   }
 
-  async deleteFile(path: string): Promise<void> {
-    const lastSlashIndex = path.lastIndexOf('/');
-    let dir = '/';
-    let name = path;
-
-    if (lastSlashIndex !== -1) {
-      dir = path.substring(0, lastSlashIndex) || '/';
-      name = path.substring(lastSlashIndex + 1);
-    }
-
+  async deleteFiles(dir: string, names: string[]): Promise<void> {
     await this.request('/api/fs/remove', {
       method: 'POST',
       body: JSON.stringify({ 
         dir: dir,
-        names: [name]
+        names: names
       }),
     });
   }
