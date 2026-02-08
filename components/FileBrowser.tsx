@@ -31,7 +31,9 @@ import {
   Trash2,
   Copy,
   CheckSquare,
-  Square
+  Square,
+  Download,
+  ArrowDown
 } from 'lucide-react';
 
 interface Props {
@@ -55,6 +57,11 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   
+  // Pull-to-refresh state
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
+  const PULL_THRESHOLD = 80;
+
   // Selection State
   const [selectedItemNames, setSelectedItemNames] = useState<Set<string>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -70,10 +77,12 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   const [sortOrder, setSortOrder] = useState<SortOrder>(() => (localStorage.getItem('alist_sort_order') as SortOrder) || 'asc');
   const [foldersFirst, setFoldersFirst] = useState<boolean>(() => localStorage.getItem('alist_folders_first') !== 'false');
 
-  // Touch gesture refs
+  // Gesture refs
   const touchStartPos = useRef({ x: 0, y: 0 });
   const touchStartTime = useRef(0);
   const longPressTimer = useRef<number | null>(null);
+  const wasLongPress = useRef(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   
   const serviceRef = useRef(new AListService(config));
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -163,6 +172,14 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     return result;
   }, [files, searchQuery, sortKey, sortOrder, foldersFirst, filterType, customExt]);
 
+  // Derived state for batch actions
+  const hasFolderSelected = useMemo(() => {
+    return Array.from(selectedItemNames).some(name => {
+      const file = files.find(f => f.name === name);
+      return file?.is_dir;
+    });
+  }, [selectedItemNames, files]);
+
   const handleNavigate = (newPath: string) => {
     setPath(newPath);
     setSearchQuery('');
@@ -216,23 +233,17 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   };
 
   const handleBatchCopyLinks = async () => {
+    if (hasFolderSelected || selectedItemNames.size === 0) return;
     setBatchActionLoading(true);
     try {
       const links = [];
       for (const name of selectedItemNames) {
-        const file = sortedAndFilteredFiles.find(f => f.name === name);
-        if (file && !file.is_dir) {
-          const fullPath = (path === '/' ? '' : path) + '/' + name;
-          const detail = await serviceRef.current.getFileDetail(fullPath);
-          links.push(detail.data.raw_url);
-        }
+        const fullPath = (path === '/' ? '' : path) + '/' + name;
+        const detail = await serviceRef.current.getFileDetail(fullPath);
+        links.push(detail.data.raw_url);
       }
-      if (links.length > 0) {
-        await navigator.clipboard.writeText(links.join('\n'));
-        alert(`Successfully copied ${links.length} download links!`);
-      } else {
-        alert("No files (only folders) were selected.");
-      }
+      await navigator.clipboard.writeText(links.join('\n'));
+      alert(`Successfully copied ${links.length} download links!`);
       setIsSelectionMode(false);
       setSelectedItemNames(new Set());
     } catch (err: any) {
@@ -242,28 +253,93 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     }
   };
 
-  // Touch handlers
-  const handleTouchStart = (e: React.TouchEvent, file?: AListFile) => {
-    if (e.touches.length !== 1) return;
-    touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    touchStartTime.current = Date.now();
-
-    if (file) {
-      longPressTimer.current = window.setTimeout(() => {
-        setIsSelectionMode(true);
-        toggleSelection(file.name);
-        // Vibrate if supported
-        if ('vibrate' in navigator) navigator.vibrate(50);
-      }, 500);
+  const handleBatchDownload = async () => {
+    if (hasFolderSelected || selectedItemNames.size === 0) return;
+    setBatchActionLoading(true);
+    try {
+      for (const name of selectedItemNames) {
+        const fullPath = (path === '/' ? '' : path) + '/' + name;
+        const detail = await serviceRef.current.getFileDetail(fullPath);
+        const a = document.createElement('a');
+        a.href = detail.data.raw_url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        await new Promise(r => setTimeout(r, 500));
+      }
+      setIsSelectionMode(false);
+      setSelectedItemNames(new Set());
+    } catch (err: any) {
+      setErrorMsg(`Batch download failed: ${err.message}`);
+    } finally {
+      setBatchActionLoading(false);
     }
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
+  // Gesture Handlers
+  const handlePointerDown = (e: React.PointerEvent, file: AListFile) => {
+    wasLongPress.current = false;
+    touchStartPos.current = { x: e.clientX, y: e.clientY };
+    touchStartTime.current = Date.now();
+
+    longPressTimer.current = window.setTimeout(() => {
+      if (!isSelectionMode) {
+        setIsSelectionMode(true);
+        toggleSelection(file.name);
+        wasLongPress.current = true;
+        if ('vibrate' in navigator) navigator.vibrate(50);
+      }
+    }, 1000);
+  };
+
+  const handlePointerUp = () => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
+  };
 
+  const handlePointerMove = (e: React.PointerEvent) => {
+    const deltaX = Math.abs(e.clientX - touchStartPos.current.x);
+    const deltaY = Math.abs(e.clientY - touchStartPos.current.y);
+    if (deltaX > 10 || deltaY > 10) {
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+      }
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    touchStartTime.current = Date.now();
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1 || isPullRefreshing) return;
+
+    const currentY = e.touches[0].clientY;
+    const currentX = e.touches[0].clientX;
+    const deltaY = currentY - touchStartPos.current.y;
+    const deltaX = currentX - touchStartPos.current.x;
+
+    // Pull-to-refresh logic
+    if (scrollContainerRef.current?.scrollTop === 0 && deltaY > 0 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      // Resistance effect
+      const pull = Math.min(deltaY * 0.4, 150);
+      setPullDistance(pull);
+      if (pull > 5) {
+        // Prevent default scrolling if we're actively pulling
+        if (e.cancelable) e.preventDefault();
+      }
+    } else {
+      setPullDistance(0);
+    }
+  };
+
+  const handleTouchEnd = async (e: React.TouchEvent) => {
     if (e.changedTouches.length !== 1) return;
     const deltaX = e.changedTouches[0].clientX - touchStartPos.current.x;
     const deltaY = e.changedTouches[0].clientY - touchStartPos.current.y;
@@ -272,10 +348,31 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     // Detect edge swipe back
     if (!isSelectionMode && touchStartPos.current.x < 40 && deltaX > 100 && Math.abs(deltaX) > Math.abs(deltaY) * 2 && duration < 500) {
       goBack();
+      setPullDistance(0);
+      return;
+    }
+
+    // Process pull-to-refresh
+    if (pullDistance >= PULL_THRESHOLD) {
+      setIsPullRefreshing(true);
+      setPullDistance(PULL_THRESHOLD); // Keep it visible during refresh
+      try {
+        await fetchFiles(path, true);
+      } finally {
+        setIsPullRefreshing(false);
+        setPullDistance(0);
+      }
+    } else {
+      setPullDistance(0);
     }
   };
 
   const handleItemClick = (file: AListFile) => {
+    if (wasLongPress.current) {
+      wasLongPress.current = false;
+      return;
+    }
+
     if (isSelectionMode) {
       toggleSelection(file.name);
       return;
@@ -336,13 +433,48 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     <div 
       className="h-full flex flex-col bg-[#f7f2fa] relative overflow-hidden"
       style={{ touchAction: 'pan-y' }}
-      onTouchStart={(e) => handleTouchStart(e)}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
+      {/* Pull-to-refresh Indicator */}
+      <div 
+        className="absolute left-0 right-0 flex justify-center z-50 pointer-events-none transition-all duration-200"
+        style={{ 
+          top: 0,
+          transform: `translateY(${pullDistance}px)`,
+          opacity: pullDistance > 10 ? 1 : 0
+        }}
+      >
+        <div className={`
+          flex items-center justify-center w-10 h-10 rounded-full bg-white shadow-lg border border-gray-100 transition-all
+          ${pullDistance >= PULL_THRESHOLD ? 'bg-indigo-600 text-white' : 'text-indigo-600'}
+        `}>
+          {isPullRefreshing ? (
+            <RefreshCw className="w-5 h-5 animate-spin" />
+          ) : pullDistance >= PULL_THRESHOLD ? (
+            <RefreshCw className="w-5 h-5 rotate-180" />
+          ) : (
+            <ArrowDown className="w-5 h-5" />
+          )}
+        </div>
+      </div>
+
       {/* Search & Toolbar Area */}
       <div className="bg-white border-b border-gray-100 z-10 shadow-sm">
         <div className="px-4 py-3 flex gap-2 items-center">
-          <div className="relative flex-1">
+          {/* Select All Button - Appears on the left only in selection mode */}
+          {isSelectionMode && (
+            <button 
+              onClick={selectAll}
+              className="p-2.5 rounded-2xl transition-all active:scale-95 bg-indigo-600 text-white border border-transparent shrink-0 animate-in slide-in-from-left-2 duration-200"
+              title="Select All"
+            >
+              {selectedItemNames.size === sortedAndFilteredFiles.length ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+            </button>
+          )}
+
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input 
               type="text" 
@@ -360,40 +492,29 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
               </button>
             )}
           </div>
+
           <div className="flex gap-1 shrink-0">
-            {isSelectionMode ? (
-              <button 
-                onClick={selectAll}
-                className="p-2.5 rounded-2xl transition-all active:scale-95 bg-indigo-600 text-white border border-transparent"
-                title="Select All"
-              >
-                {selectedItemNames.size === sortedAndFilteredFiles.length ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
-              </button>
-            ) : (
-              <>
-                <button 
-                  onClick={() => setIsFilterMenuOpen(true)}
-                  className={`p-2.5 rounded-2xl transition-all active:scale-95 border ${filterType !== 'all' ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-gray-100 border-transparent text-gray-600'}`}
-                  title="Filter"
-                >
-                  <Filter className="w-5 h-5" />
-                </button>
-                <button 
-                  onClick={() => setIsSortMenuOpen(true)}
-                  className={`p-2.5 rounded-2xl transition-all active:scale-95 border ${isSortMenuOpen ? 'bg-indigo-100 border-indigo-200 text-indigo-600' : 'bg-gray-100 border-transparent text-gray-600'}`}
-                  title="Sort"
-                >
-                  <ArrowUpDown className="w-5 h-5" />
-                </button>
-                <button 
-                  onClick={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}
-                  className="p-2.5 bg-gray-100 rounded-2xl text-gray-600 hover:bg-gray-200 active:scale-95 transition-all border border-transparent"
-                  title="View Mode"
-                >
-                  {viewMode === 'list' ? <LayoutGrid className="w-5 h-5" /> : <List className="w-5 h-5" />}
-                </button>
-              </>
-            )}
+            <button 
+              onClick={() => setIsFilterMenuOpen(true)}
+              className={`p-2.5 rounded-2xl transition-all active:scale-95 border ${filterType !== 'all' ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-gray-100 border-transparent text-gray-600'}`}
+              title="Filter"
+            >
+              <Filter className="w-5 h-5" />
+            </button>
+            <button 
+              onClick={() => setIsSortMenuOpen(true)}
+              className={`p-2.5 rounded-2xl transition-all active:scale-95 border ${isSortMenuOpen ? 'bg-indigo-100 border-indigo-200 text-indigo-600' : 'bg-gray-100 border-transparent text-gray-600'}`}
+              title="Sort"
+            >
+              <ArrowUpDown className="w-5 h-5" />
+            </button>
+            <button 
+              onClick={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}
+              className="p-2.5 bg-gray-100 rounded-2xl text-gray-600 hover:bg-gray-200 active:scale-95 transition-all border border-transparent"
+              title="View Mode"
+            >
+              {viewMode === 'list' ? <LayoutGrid className="w-5 h-5" /> : <List className="w-5 h-5" />}
+            </button>
           </div>
         </div>
       </div>
@@ -429,8 +550,12 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       )}
 
       {/* File List */}
-      <div className="flex-1 overflow-y-auto px-4 pt-2 pb-32 touch-pan-y">
-        {loading ? (
+      <div 
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto px-4 pt-2 pb-32 transition-transform duration-200"
+        style={{ transform: `translateY(${pullDistance}px)` }}
+      >
+        {loading && !isPullRefreshing ? (
           <div className="h-60 flex flex-col items-center justify-center gap-3">
             <div className="w-10 h-10 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
             <span className="text-sm text-gray-400 font-bold uppercase tracking-widest">Scanning...</span>
@@ -451,12 +576,13 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
             {sortedAndFilteredFiles.map((file) => (
               <div 
                 key={file.name}
-                onPointerDown={(e) => handleTouchStart(e as any, file)}
-                onPointerUp={() => { if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; } }}
-                onPointerCancel={() => { if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; } }}
+                onPointerDown={(e) => handlePointerDown(e, file)}
+                onPointerUp={handlePointerUp}
+                onPointerLeave={handlePointerUp}
+                onPointerMove={handlePointerMove}
                 onClick={() => handleItemClick(file)}
                 className={`
-                  relative group transition-all active:scale-[0.96] overflow-hidden
+                  relative group transition-all active:scale-[0.96] overflow-hidden select-none touch-none
                   ${viewMode === 'list' 
                     ? 'flex items-center gap-4 p-3 rounded-[1.5rem] border transition-colors shadow-sm' 
                     : 'flex flex-col items-center p-3 rounded-[1.5rem] border transition-colors shadow-sm'
@@ -477,7 +603,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
 
                 <div className={`${viewMode === 'list' ? 'shrink-0' : 'w-full aspect-square flex items-center justify-center mb-2 shrink-0 bg-gray-50 rounded-2xl'}`}>
                   {file.thumb ? (
-                     <img src={file.thumb} alt="" className="w-10 h-10 rounded-xl object-cover shadow-sm" />
+                     <img src={file.thumb} alt="" className="w-10 h-10 rounded-xl object-cover shadow-sm pointer-events-none" />
                   ) : (
                     <FileIcon isDir={file.is_dir} name={file.name} className={viewMode === 'list' ? 'w-8 h-8' : 'w-12 h-12'} />
                   )}
@@ -523,8 +649,8 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       {/* Multi-Select Action Bar */}
       {isSelectionMode && (
         <div className="fixed bottom-6 left-6 right-6 z-50 flex flex-col items-center pb-safe">
-           <div className="w-full bg-gray-900 text-white rounded-[2rem] p-4 shadow-2xl flex items-center justify-between gap-4 animate-in slide-in-from-bottom-4">
-              <div className="flex items-center gap-3 ml-2">
+           <div className="w-full bg-gray-900 text-white rounded-[2rem] p-4 shadow-2xl flex items-center justify-between gap-2 animate-in slide-in-from-bottom-4">
+              <div className="flex items-center gap-2 ml-2">
                 <button 
                   onClick={() => {setIsSelectionMode(false); setSelectedItemNames(new Set());}}
                   className="p-1 hover:bg-white/10 rounded-full transition-colors"
@@ -532,30 +658,51 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                   <X className="w-5 h-5" />
                 </button>
                 <div className="flex flex-col">
-                   <span className="text-sm font-black">{selectedItemNames.size} Selected</span>
-                   <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Multi-Select Mode</span>
+                   <span className="text-xs font-black">{selectedItemNames.size}</span>
+                   <span className="text-[7px] text-gray-400 font-bold uppercase tracking-widest">Selected</span>
                 </div>
               </div>
 
               <div className="flex gap-2">
+                {/* Download Button */}
+                <button 
+                  onClick={handleBatchDownload}
+                  disabled={batchActionLoading || hasFolderSelected || selectedItemNames.size === 0}
+                  className={`p-3 rounded-2xl transition-all active:scale-95 disabled:opacity-30 flex items-center gap-2 ${hasFolderSelected ? 'bg-gray-700 text-gray-500' : 'bg-white/10 hover:bg-white/20'}`}
+                  title="Batch Download"
+                >
+                  {batchActionLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+                </button>
+
+                {/* Copy Links Button */}
                 <button 
                   onClick={handleBatchCopyLinks}
-                  disabled={batchActionLoading}
-                  className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-all active:scale-95 disabled:opacity-30"
+                  disabled={batchActionLoading || hasFolderSelected || selectedItemNames.size === 0}
+                  className={`p-3 rounded-2xl transition-all active:scale-95 disabled:opacity-30 flex items-center gap-2 ${hasFolderSelected ? 'bg-gray-700 text-gray-500' : 'bg-white/10 hover:bg-white/20'}`}
                   title="Copy Direct Links"
                 >
                   {batchActionLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Copy className="w-5 h-5" />}
                 </button>
+
+                {/* Delete Button */}
                 <button 
                   onClick={() => setShowBatchDeleteConfirm(true)}
-                  disabled={batchActionLoading}
-                  className="p-3 bg-red-600/80 hover:bg-red-600 rounded-2xl transition-all active:scale-95 disabled:opacity-30"
+                  disabled={batchActionLoading || selectedItemNames.size === 0}
+                  className="p-3 bg-red-600 hover:bg-red-500 rounded-2xl transition-all active:scale-95 disabled:opacity-30"
                   title="Batch Delete"
                 >
                   <Trash2 className="w-5 h-5" />
                 </button>
               </div>
            </div>
+           
+           {hasFolderSelected && (
+              <div className="mt-2 bg-gray-800/80 backdrop-blur px-3 py-1.5 rounded-full animate-in slide-in-from-top-1">
+                 <p className="text-[9px] text-orange-300 font-black uppercase tracking-widest">
+                   Link/Download disabled when folders are selected
+                 </p>
+              </div>
+           )}
         </div>
       )}
 
