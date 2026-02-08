@@ -32,8 +32,7 @@ import {
   Copy,
   CheckSquare,
   Square,
-  Download,
-  ArrowDown
+  Download
 } from 'lucide-react';
 
 interface Props {
@@ -57,11 +56,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   
-  // Pull-to-refresh state
-  const [pullDistance, setPullDistance] = useState(0);
-  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
-  const PULL_THRESHOLD = 80;
-
   // Selection State
   const [selectedItemNames, setSelectedItemNames] = useState<Set<string>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -82,7 +76,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   const touchStartTime = useRef(0);
   const longPressTimer = useRef<number | null>(null);
   const wasLongPress = useRef(false);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
   
   const serviceRef = useRef(new AListService(config));
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -317,53 +310,15 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     touchStartTime.current = Date.now();
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length !== 1 || isPullRefreshing) return;
-
-    const currentY = e.touches[0].clientY;
-    const currentX = e.touches[0].clientX;
-    const deltaY = currentY - touchStartPos.current.y;
-    const deltaX = currentX - touchStartPos.current.x;
-
-    // Pull-to-refresh logic
-    if (scrollContainerRef.current?.scrollTop === 0 && deltaY > 0 && Math.abs(deltaY) > Math.abs(deltaX)) {
-      // Resistance effect
-      const pull = Math.min(deltaY * 0.4, 150);
-      setPullDistance(pull);
-      if (pull > 5) {
-        // Prevent default scrolling if we're actively pulling
-        if (e.cancelable) e.preventDefault();
-      }
-    } else {
-      setPullDistance(0);
-    }
-  };
-
-  const handleTouchEnd = async (e: React.TouchEvent) => {
+  const handleTouchEnd = (e: React.TouchEvent) => {
     if (e.changedTouches.length !== 1) return;
     const deltaX = e.changedTouches[0].clientX - touchStartPos.current.x;
     const deltaY = e.changedTouches[0].clientY - touchStartPos.current.y;
     const duration = Date.now() - touchStartTime.current;
 
-    // Detect edge swipe back
+    // Detect edge swipe back (Only when NOT in selection mode)
     if (!isSelectionMode && touchStartPos.current.x < 40 && deltaX > 100 && Math.abs(deltaX) > Math.abs(deltaY) * 2 && duration < 500) {
       goBack();
-      setPullDistance(0);
-      return;
-    }
-
-    // Process pull-to-refresh
-    if (pullDistance >= PULL_THRESHOLD) {
-      setIsPullRefreshing(true);
-      setPullDistance(PULL_THRESHOLD); // Keep it visible during refresh
-      try {
-        await fetchFiles(path, true);
-      } finally {
-        setIsPullRefreshing(false);
-        setPullDistance(0);
-      }
-    } else {
-      setPullDistance(0);
     }
   };
 
@@ -434,32 +389,8 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       className="h-full flex flex-col bg-[#f7f2fa] relative overflow-hidden"
       style={{ touchAction: 'pan-y' }}
       onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Pull-to-refresh Indicator */}
-      <div 
-        className="absolute left-0 right-0 flex justify-center z-50 pointer-events-none transition-all duration-200"
-        style={{ 
-          top: 0,
-          transform: `translateY(${pullDistance}px)`,
-          opacity: pullDistance > 10 ? 1 : 0
-        }}
-      >
-        <div className={`
-          flex items-center justify-center w-10 h-10 rounded-full bg-white shadow-lg border border-gray-100 transition-all
-          ${pullDistance >= PULL_THRESHOLD ? 'bg-indigo-600 text-white' : 'text-indigo-600'}
-        `}>
-          {isPullRefreshing ? (
-            <RefreshCw className="w-5 h-5 animate-spin" />
-          ) : pullDistance >= PULL_THRESHOLD ? (
-            <RefreshCw className="w-5 h-5 rotate-180" />
-          ) : (
-            <ArrowDown className="w-5 h-5" />
-          )}
-        </div>
-      </div>
-
       {/* Search & Toolbar Area */}
       <div className="bg-white border-b border-gray-100 z-10 shadow-sm">
         <div className="px-4 py-3 flex gap-2 items-center">
@@ -550,12 +481,8 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       )}
 
       {/* File List */}
-      <div 
-        ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto px-4 pt-2 pb-32 transition-transform duration-200"
-        style={{ transform: `translateY(${pullDistance}px)` }}
-      >
-        {loading && !isPullRefreshing ? (
+      <div className="flex-1 overflow-y-auto px-4 pt-2 pb-32 touch-pan-y">
+        {loading ? (
           <div className="h-60 flex flex-col items-center justify-center gap-3">
             <div className="w-10 h-10 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
             <span className="text-sm text-gray-400 font-bold uppercase tracking-widest">Scanning...</span>
