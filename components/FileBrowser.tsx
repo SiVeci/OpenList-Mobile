@@ -33,7 +33,6 @@ import {
   CheckSquare,
   Square,
   Download,
-  ArrowDown,
   Info
 } from 'lucide-react';
 
@@ -62,8 +61,12 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
   const [pullDistance, setPullDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const PULL_THRESHOLD = 80;
-  const MAX_PULL = 110;
+  
+  // Constants for high-quality mechanical PTR feel
+  const PULL_LIMIT = 110; // The hard "wall"
+  const PULL_TRIGGER_ZONE = 100; // Point where refresh is armed
+  const DAMPING_COEFFICIENT = 0.65; // Lower = more resistance
+  
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Selection State
@@ -113,14 +116,13 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       const response = await serviceRef.current.listFiles(currentPath, 1, 100, forceRefresh);
       setFiles(response.data.content || []);
       if (forceRefresh) {
-        setToastMsg("List updated from server");
+        setToastMsg("Sync Complete");
       }
     } catch (err: any) {
       if (err.message.includes('Unauthorized')) {
         onSessionExpired();
       }
-      setErrorMsg(`Failed to load files: ${err.message}`);
-      console.error(err);
+      setErrorMsg(`Sync failed: ${err.message}`);
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -189,14 +191,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     return result;
   }, [files, searchQuery, sortKey, sortOrder, foldersFirst, filterType, customExt]);
 
-  // Derived state for batch actions
-  const hasFolderSelected = useMemo(() => {
-    return Array.from(selectedItemNames).some(name => {
-      const file = files.find(f => f.name === name);
-      return file?.is_dir;
-    });
-  }, [selectedItemNames, files]);
-
   const handleNavigate = (newPath: string) => {
     setPath(newPath);
     setSearchQuery('');
@@ -211,89 +205,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     setFilterType('all');
   }, [path]);
 
-  // Multi-Selection Handlers
-  const toggleSelection = (name: string) => {
-    setSelectedItemNames(prev => {
-      const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
-        if (next.size === 0) setIsSelectionMode(false);
-      } else {
-        next.add(name);
-      }
-      return next;
-    });
-  };
-
-  const selectAll = () => {
-    if (selectedItemNames.size === sortedAndFilteredFiles.length) {
-      setSelectedItemNames(new Set());
-      setIsSelectionMode(false);
-    } else {
-      setSelectedItemNames(new Set(sortedAndFilteredFiles.map(f => f.name)));
-    }
-  };
-
-  const handleBatchDelete = async () => {
-    setBatchActionLoading(true);
-    try {
-      await serviceRef.current.deleteFiles(path, Array.from(selectedItemNames));
-      await fetchFiles(path, true);
-      setIsSelectionMode(false);
-      setSelectedItemNames(new Set());
-    } catch (err: any) {
-      setErrorMsg(`Batch delete failed: ${err.message}`);
-    } finally {
-      setBatchActionLoading(false);
-      setShowBatchDeleteConfirm(false);
-    }
-  };
-
-  const handleBatchCopyLinks = async () => {
-    if (hasFolderSelected || selectedItemNames.size === 0) return;
-    setBatchActionLoading(true);
-    try {
-      const links = [];
-      for (const name of selectedItemNames) {
-        const fullPath = (path === '/' ? '' : path) + '/' + name;
-        const detail = await serviceRef.current.getFileDetail(fullPath);
-        links.push(detail.data.raw_url);
-      }
-      await navigator.clipboard.writeText(links.join('\n'));
-      alert(`Successfully copied ${links.length} download links!`);
-      setIsSelectionMode(false);
-      setSelectedItemNames(new Set());
-    } catch (err: any) {
-      setErrorMsg(`Batch link retrieval failed: ${err.message}`);
-    } finally {
-      setBatchActionLoading(false);
-    }
-  };
-
-  const handleBatchDownload = async () => {
-    if (hasFolderSelected || selectedItemNames.size === 0) return;
-    setBatchActionLoading(true);
-    try {
-      for (const name of selectedItemNames) {
-        const fullPath = (path === '/' ? '' : path) + '/' + name;
-        const detail = await serviceRef.current.getFileDetail(fullPath);
-        const a = document.createElement('a');
-        a.href = detail.data.raw_url;
-        a.download = name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        await new Promise(r => setTimeout(r, 500));
-      }
-      setIsSelectionMode(false);
-      setSelectedItemNames(new Set());
-    } catch (err: any) {
-      setErrorMsg(`Batch download failed: ${err.message}`);
-    } finally {
-      setBatchActionLoading(false);
-    }
-  };
-
   // Gesture Handlers
   const handlePointerDown = (e: React.PointerEvent, file: AListFile) => {
     wasLongPress.current = false;
@@ -303,7 +214,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     longPressTimer.current = window.setTimeout(() => {
       if (!isSelectionMode) {
         setIsSelectionMode(true);
-        toggleSelection(file.name);
+        setSelectedItemNames(new Set([file.name]));
         wasLongPress.current = true;
         if ('vibrate' in navigator) navigator.vibrate(50);
       }
@@ -332,6 +243,7 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     if (e.touches.length !== 1) return;
     touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     touchStartTime.current = Date.now();
+    // Only arm PTR if at top of scroll
     isPulling.current = scrollContainerRef.current?.scrollTop === 0;
   };
 
@@ -343,19 +255,23 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     const deltaY = currentY - touchStartPos.current.y;
     const deltaX = Math.abs(currentX - touchStartPos.current.x);
 
-    // Trigger pull if vertical move is greater than horizontal
+    // Only handle pull if it's primarily vertical and downwards
     if (deltaY > 0 && deltaY > deltaX) {
-      // Damping and thresholding
-      let dampedDistance = deltaY * 0.5;
+      // Enhanced damping logic using a power function for a "heavy" feel
+      // This creates exponential resistance as the pull distance increases
+      let rawDistance = Math.pow(deltaY, 0.8) * DAMPING_COEFFICIENT * 2;
       
-      // Lock movement once we hit MAX_PULL to prevent excessive scrolling
-      if (dampedDistance > MAX_PULL) {
-        dampedDistance = MAX_PULL + (dampedDistance - MAX_PULL) * 0.1;
+      // Strict mechanical limit at PULL_LIMIT
+      const finalDistance = Math.min(rawDistance, PULL_LIMIT);
+      
+      setPullDistance(finalDistance);
+      
+      // Feedback at the trigger point
+      if (finalDistance >= PULL_TRIGGER_ZONE && pullDistance < PULL_TRIGGER_ZONE) {
+         if ('vibrate' in navigator) navigator.vibrate(12);
       }
-      
-      setPullDistance(dampedDistance);
-      
-      // Block native scrolling
+
+      // Block native scrolling and browser reload
       if (e.cancelable) e.preventDefault();
     } else {
       setPullDistance(0);
@@ -375,11 +291,11 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       return;
     }
 
-    // Process pull-to-refresh
-    if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
+    // Must reach the trigger zone (the hard stop area) to refresh
+    if (pullDistance >= PULL_TRIGGER_ZONE && !isRefreshing) {
       setIsRefreshing(true);
-      setPullDistance(PULL_THRESHOLD - 20); // Hold position slightly above threshold
-      setToastMsg("Refreshing directory...");
+      setPullDistance(50); // Snap back to holding position
+      setToastMsg("Refreshing list...");
       fetchFiles(path, true);
     } else {
       setPullDistance(0);
@@ -392,36 +308,23 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       wasLongPress.current = false;
       return;
     }
-
     if (isSelectionMode) {
-      toggleSelection(file.name);
+      setSelectedItemNames(prev => {
+        const next = new Set(prev);
+        if (next.has(file.name)) {
+          next.delete(file.name);
+          if (next.size === 0) setIsSelectionMode(false);
+        } else {
+          next.add(file.name);
+        }
+        return next;
+      });
       return;
     }
-
     if (file.is_dir) {
       handleNavigate((path === '/' ? '' : path) + '/' + file.name);
     } else {
       setSelectedFile({ file, path: (path === '/' ? '' : path) + '/' + file.name });
-    }
-  };
-
-  const handleUploadClick = () => {
-    setErrorMsg(null);
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      await serviceRef.current.uploadFile(path, file);
-      await fetchFiles(path, true);
-    } catch (err: any) {
-      setErrorMsg(`Upload failed: ${err.message}`);
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -440,15 +343,6 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
 
   const breadcrumbs = path.split('/').filter(Boolean);
 
-  const filterChips: { id: FilterType, label: string, icon: any }[] = [
-    { id: 'all', label: 'All Files', icon: Filter },
-    { id: 'video', label: 'Videos', icon: FileVideo },
-    { id: 'image', label: 'Images', icon: FileImage },
-    { id: 'doc', label: 'Documents', icon: FileText },
-    { id: 'others', label: 'Others', icon: FileBox },
-    { id: 'custom', label: 'By Extension', icon: Hash },
-  ];
-
   return (
     <div 
       className="h-full flex flex-col bg-[#f7f2fa] relative overflow-hidden"
@@ -459,40 +353,47 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
     >
       {/* Pull-to-refresh Indicator */}
       <div 
-        className="absolute left-0 right-0 flex justify-center z-50 pointer-events-none transition-all duration-300 ease-out"
+        className="absolute left-0 right-0 flex justify-center z-50 pointer-events-none"
         style={{ 
           top: 0, 
-          transform: `translateY(${Math.max(pullDistance - 50, -50)}px)`,
-          opacity: pullDistance > 10 ? 1 : 0
+          transform: `translateY(${Math.max(pullDistance - 55, -55)}px)`,
+          opacity: pullDistance > 10 ? 1 : 0,
+          transition: isRefreshing ? 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)' : 'none'
         }}
       >
         <div className={`
-          flex items-center gap-2 bg-white rounded-full px-4 py-2 shadow-xl border border-gray-100 transition-all
-          ${pullDistance >= PULL_THRESHOLD ? 'ring-2 ring-indigo-500 ring-offset-2' : ''}
+          flex items-center gap-2 bg-white rounded-full px-5 py-2.5 shadow-2xl border transition-all duration-300
+          ${pullDistance >= PULL_TRIGGER_ZONE ? 'border-indigo-500 scale-105 shadow-indigo-100' : 'border-gray-100 scale-95'}
         `}>
           <RefreshCw 
-            className={`w-5 h-5 transition-colors ${isRefreshing ? 'animate-spin text-indigo-600' : pullDistance >= PULL_THRESHOLD ? 'text-indigo-600' : 'text-gray-400'}`} 
+            className={`w-5 h-5 transition-colors ${isRefreshing ? 'animate-spin text-indigo-600' : pullDistance >= PULL_TRIGGER_ZONE ? 'text-indigo-600' : 'text-gray-300'}`} 
             style={{ 
-              transform: isRefreshing ? undefined : `rotate(${pullDistance * 4.5}deg)`,
+              transform: isRefreshing ? undefined : `rotate(${pullDistance * 4}deg)`,
               transition: isRefreshing ? undefined : 'none'
             }} 
           />
-          {pullDistance >= PULL_THRESHOLD && !isRefreshing && (
-            <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest animate-in slide-in-from-right-1">Release to Refresh</span>
+          {pullDistance >= PULL_TRIGGER_ZONE && !isRefreshing && (
+            <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest animate-in fade-in slide-in-from-right-2 duration-300">Sync Data</span>
           )}
         </div>
       </div>
 
-      {/* Search & Toolbar Area */}
-      <div className="bg-white border-b border-gray-100 z-10 shadow-sm">
+      {/* Toolbar Area */}
+      <div className="bg-white border-b border-gray-100 z-10 shadow-sm shrink-0">
         <div className="px-4 py-3 flex gap-2 items-center">
           {isSelectionMode && (
             <button 
-              onClick={selectAll}
-              className="p-2.5 rounded-2xl transition-all active:scale-95 bg-indigo-600 text-white border border-transparent shrink-0 animate-in slide-in-from-left-2 duration-200"
-              title="Select All"
+              onClick={() => {
+                if (selectedItemNames.size === sortedAndFilteredFiles.length) {
+                  setSelectedItemNames(new Set());
+                  setIsSelectionMode(false);
+                } else {
+                  setSelectedItemNames(new Set(sortedAndFilteredFiles.map(f => f.name)));
+                }
+              }}
+              className="p-2.5 rounded-2xl bg-indigo-600 text-white shrink-0 animate-in slide-in-from-left-2 duration-200 shadow-lg shadow-indigo-100"
             >
-              {selectedItemNames.size === sortedAndFilteredFiles.length ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+              <CheckSquare className="w-5 h-5" />
             </button>
           )}
 
@@ -505,35 +406,24 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
           </div>
 
           <div className="flex gap-1 shrink-0">
             <button 
               onClick={() => setIsFilterMenuOpen(true)}
-              className={`p-2.5 rounded-2xl transition-all active:scale-95 border ${filterType !== 'all' ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-gray-100 border-transparent text-gray-600'}`}
-              title="Filter"
+              className={`p-2.5 rounded-2xl border ${filterType !== 'all' ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-gray-100 border-transparent text-gray-600'}`}
             >
               <Filter className="w-5 h-5" />
             </button>
             <button 
               onClick={() => setIsSortMenuOpen(true)}
-              className={`p-2.5 rounded-2xl transition-all active:scale-95 border ${isSortMenuOpen ? 'bg-indigo-100 border-indigo-200 text-indigo-600' : 'bg-gray-100 border-transparent text-gray-600'}`}
-              title="Sort"
+              className="p-2.5 bg-gray-100 border-transparent rounded-2xl text-gray-600"
             >
               <ArrowUpDown className="w-5 h-5" />
             </button>
             <button 
               onClick={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}
-              className="p-2.5 bg-gray-100 rounded-2xl text-gray-600 hover:bg-gray-200 active:scale-95 transition-all border border-transparent"
-              title="View Mode"
+              className="p-2.5 bg-gray-100 border-transparent rounded-2xl text-gray-600"
             >
               {viewMode === 'list' ? <LayoutGrid className="w-5 h-5" /> : <List className="w-5 h-5" />}
             </button>
@@ -542,19 +432,14 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
       </div>
 
       {/* Breadcrumbs */}
-      <div className="flex items-center gap-1 px-4 py-3 overflow-x-auto whitespace-nowrap hide-scrollbar bg-white/50 backdrop-blur-sm border-b border-gray-100 text-sm z-10">
-        <button 
-          onClick={() => handleNavigate('/')}
-          className="p-1 hover:text-indigo-600 flex items-center text-gray-400"
-        >
-          <Home className="w-4 h-4" />
-        </button>
+      <div className="flex items-center gap-1 px-4 py-3 overflow-x-auto whitespace-nowrap hide-scrollbar bg-white/50 backdrop-blur-sm border-b border-gray-100 text-sm z-10 shrink-0">
+        <button onClick={() => handleNavigate('/')} className="p-1 text-gray-400"><Home className="w-4 h-4" /></button>
         {breadcrumbs.map((crumb, idx) => (
           <React.Fragment key={idx}>
             <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
             <button 
               onClick={() => handleNavigate('/' + breadcrumbs.slice(0, idx + 1).join('/'))}
-              className={`hover:text-indigo-600 px-1 rounded-md transition-colors ${idx === breadcrumbs.length - 1 ? 'font-bold text-indigo-600 bg-indigo-50/50' : 'text-gray-500'}`}
+              className={`px-1.5 py-0.5 rounded-lg transition-colors ${idx === breadcrumbs.length - 1 ? 'font-bold text-indigo-600 bg-indigo-50' : 'text-gray-500'}`}
             >
               {crumb}
             </button>
@@ -562,20 +447,14 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
         ))}
       </div>
 
-      {/* Error Banner */}
-      {errorMsg && (
-        <div className="mx-4 mt-2 p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-100 flex items-center gap-2 shadow-sm animate-pulse z-10">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <p className="flex-1">{errorMsg}</p>
-          <button onClick={() => setErrorMsg(null)} className="p-1 font-bold opacity-50">✕</button>
-        </div>
-      )}
-
-      {/* File List */}
+      {/* Main File List Container */}
       <div 
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto px-4 pt-2 pb-32 scroll-smooth transition-transform duration-300 ease-out"
-        style={{ transform: pullDistance > 0 ? `translateY(${pullDistance * 0.7}px)` : undefined }}
+        className="flex-1 overflow-y-auto px-4 pt-2 pb-32 transition-transform ease-out"
+        style={{ 
+          transform: pullDistance > 0 ? `translateY(${pullDistance * 0.85}px)` : undefined,
+          transitionDuration: isRefreshing ? '400ms' : pullDistance > 0 ? '0ms' : '300ms'
+        }}
       >
         {loading && !isRefreshing ? (
           <div className="h-60 flex flex-col items-center justify-center gap-3">
@@ -583,15 +462,9 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
             <span className="text-sm text-gray-400 font-bold uppercase tracking-widest">Scanning...</span>
           </div>
         ) : sortedAndFilteredFiles.length === 0 ? (
-          <div className="h-60 flex flex-col items-center justify-center text-gray-400 opacity-50 scale-110 grayscale">
-             <Search className="w-16 h-16 mb-4" />
-             <p className="text-sm font-medium">Nothing matches your filters</p>
-             <button 
-              onClick={() => {setFilterType('all'); setSearchQuery(''); setCustomExt('');}}
-              className="mt-4 text-indigo-600 text-xs font-bold bg-indigo-50 px-4 py-2 rounded-full active:scale-95 transition-all"
-             >
-              Clear All Filters
-             </button>
+          <div className="h-60 flex flex-col items-center justify-center text-gray-300">
+             <Search className="w-16 h-16 mb-4 opacity-30" />
+             <p className="text-sm font-black uppercase tracking-widest">No matching files</p>
           </div>
         ) : (
           <div className={viewMode === 'list' ? 'flex flex-col gap-1.5' : 'grid grid-cols-3 sm:grid-cols-4 gap-4'}>
@@ -606,21 +479,19 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                 className={`
                   relative group transition-all active:scale-[0.96] overflow-hidden select-none
                   ${viewMode === 'list' 
-                    ? 'flex items-center gap-4 p-3 rounded-[1.5rem] border transition-colors shadow-sm' 
-                    : 'flex flex-col items-center p-3 rounded-[1.5rem] border transition-colors shadow-sm'
+                    ? 'flex items-center gap-4 p-3.5 rounded-[1.5rem] border transition-colors shadow-sm' 
+                    : 'flex flex-col items-center p-3.5 rounded-[1.5rem] border transition-colors shadow-sm'
                   }
                   ${selectedItemNames.has(file.name) 
                     ? 'bg-indigo-50 border-indigo-200' 
-                    : 'bg-white border-transparent hover:border-indigo-100'
+                    : 'bg-white border-transparent hover:border-indigo-50'
                   }
                 `}
                 style={{ touchAction: 'pan-y' }}
               >
                 {isSelectionMode && (
-                  <div className={`absolute top-2 left-2 z-10 transition-transform ${selectedItemNames.has(file.name) ? 'scale-100' : 'scale-0'}`}>
-                    <div className="bg-indigo-600 rounded-full p-0.5">
-                      <Check className="w-3 h-3 text-white" />
-                    </div>
+                  <div className={`absolute top-2.5 left-2.5 z-10 transition-transform ${selectedItemNames.has(file.name) ? 'scale-100' : 'scale-0'}`}>
+                    <div className="bg-indigo-600 rounded-full p-0.5 shadow-sm"><Check className="w-3 h-3 text-white" /></div>
                   </div>
                 )}
 
@@ -633,32 +504,21 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
                 </div>
                 
                 <div className={`min-w-0 ${viewMode === 'grid' ? 'w-full text-center' : 'flex-1'}`}>
-                  <h3 className={`
-                    font-bold text-gray-800 break-words
-                    ${viewMode === 'list' 
-                      ? 'text-sm truncate' 
-                      : 'text-[11px] leading-tight line-clamp-2 h-7 overflow-hidden px-1'
-                    }
-                  `}>
+                  <h3 className={`font-bold text-gray-800 break-words ${viewMode === 'list' ? 'text-sm truncate' : 'text-[11px] leading-tight line-clamp-2 px-1 h-7 overflow-hidden'}`}>
                     {file.name}
                   </h3>
                   {viewMode === 'list' && (
                     <p className="text-[10px] text-gray-400 mt-1 flex items-center gap-2 font-medium">
-                      {!file.is_dir && <span>{formatSize(file.size)}</span>}
-                      {file.is_dir && <span>Folder</span>}
+                      {!file.is_dir ? formatSize(file.size) : 'Folder'}
                       <span className="opacity-30">•</span>
-                      <span>{formatDate(file.modified)}</span>
+                      {formatDate(file.modified)}
                     </p>
                   )}
                 </div>
-
                 {!file.is_dir && viewMode === 'list' && !isSelectionMode && (
                    <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedFile({ file, path: (path === '/' ? '' : path) + '/' + file.name });
-                    }}
-                    className="p-2 hover:bg-gray-50 rounded-full text-gray-300 transition-colors"
+                    onClick={(e) => { e.stopPropagation(); setSelectedFile({ file, path: (path === '/' ? '' : path) + '/' + file.name }); }}
+                    className="p-2 hover:bg-gray-100 rounded-full text-gray-300 transition-colors"
                    >
                      <MoreVertical className="w-5 h-5" />
                    </button>
@@ -669,270 +529,85 @@ const FileBrowser: React.FC<Props> = ({ config, onSessionExpired }) => {
         )}
       </div>
 
-      {/* Global Toast for Actions */}
+      {/* Global Toast with Modern Styling */}
       {toastMsg && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-bottom-4 duration-300">
-          <div className="bg-gray-900/90 backdrop-blur-md text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-white/10">
+        <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-bottom-8 duration-500 cubic-bezier(0.2, 1, 0.3, 1)">
+          <div className="bg-gray-900/90 backdrop-blur-xl text-white px-7 py-3.5 rounded-[1.5rem] shadow-2xl flex items-center gap-3 border border-white/10 ring-1 ring-black/5">
             <Info className="w-4 h-4 text-indigo-400" />
-            <span className="text-[11px] font-black uppercase tracking-widest">{toastMsg}</span>
+            <span className="text-[11px] font-black uppercase tracking-[0.1em]">{toastMsg}</span>
           </div>
         </div>
       )}
 
-      {/* Multi-Select Action Bar */}
-      {isSelectionMode && (
-        <div className="fixed bottom-6 left-6 right-6 z-50 flex flex-col items-center pb-safe">
-           <div className="w-full bg-gray-900 text-white rounded-[2rem] p-4 shadow-2xl flex items-center justify-between gap-2 animate-in slide-in-from-bottom-4">
-              <div className="flex items-center gap-2 ml-2">
-                <button 
-                  onClick={() => {setIsSelectionMode(false); setSelectedItemNames(new Set());}}
-                  className="p-1 hover:bg-white/10 rounded-full transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-                <div className="flex flex-col">
-                   <span className="text-xs font-black">{selectedItemNames.size}</span>
-                   <span className="text-[7px] text-gray-400 font-bold uppercase tracking-widest">Selected</span>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <button 
-                  onClick={handleBatchDownload}
-                  disabled={batchActionLoading || hasFolderSelected || selectedItemNames.size === 0}
-                  className={`p-3 rounded-2xl transition-all active:scale-95 disabled:opacity-30 flex items-center gap-2 ${hasFolderSelected ? 'bg-gray-700 text-gray-500' : 'bg-white/10 hover:bg-white/20'}`}
-                  title="Batch Download"
-                >
-                  {batchActionLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-                </button>
-
-                <button 
-                  onClick={handleBatchCopyLinks}
-                  disabled={batchActionLoading || hasFolderSelected || selectedItemNames.size === 0}
-                  className={`p-3 rounded-2xl transition-all active:scale-95 disabled:opacity-30 flex items-center gap-2 ${hasFolderSelected ? 'bg-gray-700 text-gray-500' : 'bg-white/10 hover:bg-white/20'}`}
-                  title="Copy Direct Links"
-                >
-                  {batchActionLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Copy className="w-5 h-5" />}
-                </button>
-
-                <button 
-                  onClick={() => setShowBatchDeleteConfirm(true)}
-                  disabled={batchActionLoading || selectedItemNames.size === 0}
-                  className="p-3 bg-red-600 hover:bg-red-500 rounded-2xl transition-all active:scale-95 disabled:opacity-30"
-                  title="Batch Delete"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </div>
-           </div>
-           
-           {hasFolderSelected && (
-              <div className="mt-2 bg-gray-800/80 backdrop-blur px-3 py-1.5 rounded-full animate-in slide-in-from-top-1">
-                 <p className="text-[9px] text-orange-300 font-black uppercase tracking-widest">
-                   Link/Download disabled when folders are selected
-                 </p>
-              </div>
-           )}
-        </div>
-      )}
-
-      {/* Overlays ... (Batch Delete, Filter, Sort, FAB) */}
-      {showBatchDeleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-[2.5rem] p-8 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
-            <div className="flex flex-col items-center text-center">
-              <div className="w-16 h-16 bg-red-50 rounded-3xl flex items-center justify-center mb-6">
-                <Trash2 className="w-8 h-8 text-red-500" />
-              </div>
-              <h3 className="text-xl font-black text-gray-900 mb-3">Delete {selectedItemNames.size} Items?</h3>
-              <p className="text-sm text-gray-500 leading-relaxed mb-8">
-                Are you sure you want to permanently delete these items? This action cannot be reversed.
-              </p>
-              <div className="grid grid-cols-2 gap-4 w-full">
-                <button
-                  onClick={() => setShowBatchDeleteConfirm(false)}
-                  className="py-4 bg-gray-50 text-gray-600 rounded-2xl text-sm font-black active:scale-95 transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleBatchDelete}
-                  className="py-4 bg-red-600 text-white rounded-2xl text-sm font-black shadow-lg shadow-red-100 active:scale-95 transition-all"
-                >
-                  Delete All
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isFilterMenuOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-in fade-in" onClick={() => setIsFilterMenuOpen(false)} />
-          <div className="relative w-full max-w-lg bg-white rounded-t-[3rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 pb-safe">
-            <div className="w-12 h-1.5 bg-gray-100 rounded-full mx-auto mb-8" />
-            <h3 className="text-xl font-black text-gray-900 mb-8 px-2 flex items-center gap-3">
-              <Filter className="w-6 h-6 text-indigo-600" />
-              Filter Files
-            </h3>
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-2">Select Category</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {filterChips.map((chip) => (
-                    <button
-                      key={chip.id}
-                      onClick={() => setFilterType(chip.id)}
-                      className={`py-4 rounded-2xl text-xs font-bold transition-all flex items-center gap-4 px-5 ${filterType === chip.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
-                    >
-                      <chip.icon className={`w-4 h-4 ${filterType === chip.id ? 'text-white' : 'text-gray-400'}`} />
-                      {chip.label}
-                      {filterType === chip.id && <Check className="w-4 h-4 ml-auto" />}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {filterType === 'custom' && (
-                <div className="space-y-3 animate-in slide-in-from-top-2 duration-200">
-                  <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-2">Enter Extension</p>
-                  <div className="relative">
-                    <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input 
-                      autoFocus
-                      type="text"
-                      placeholder="e.g. rar, zip, iso..."
-                      className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-gray-800"
-                      value={customExt}
-                      onChange={(e) => setCustomExt(e.target.value)}
-                    />
-                  </div>
-                </div>
-              )}
-              <button 
-                onClick={() => setIsFilterMenuOpen(false)}
-                className="w-full py-5 bg-gray-900 text-white rounded-[2rem] font-black text-sm active:scale-[0.98] transition-all shadow-xl shadow-gray-200 mt-4"
-              >
-                Show Results
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isSortMenuOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-in fade-in" onClick={() => setIsSortMenuOpen(false)} />
-          <div className="relative w-full max-w-lg bg-white rounded-t-[3rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 pb-safe">
-            <div className="w-12 h-1.5 bg-gray-100 rounded-full mx-auto mb-8" />
-            <h3 className="text-xl font-black text-gray-900 mb-8 px-2 flex items-center gap-3">
-              <ArrowUpDown className="w-6 h-6 text-indigo-600" />
-              Sort Options
-            </h3>
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-2">Sort Files By</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { key: 'name', label: 'Name' },
-                    { key: 'modified', label: 'Date' },
-                    { key: 'size', label: 'Size' }
-                  ].map((item) => (
-                    <button
-                      key={item.key}
-                      onClick={() => setSortKey(item.key as SortKey)}
-                      className={`py-4 rounded-2xl text-xs font-bold transition-all flex flex-col items-center gap-2 ${sortKey === item.key ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-gray-50 text-gray-500'}`}
-                    >
-                      {item.label}
-                      {sortKey === item.key && <Check className="w-3 h-3" />}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-3">
-                <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-2">Sort Direction</p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSortOrder('asc')}
-                    className={`flex-1 py-4 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${sortOrder === 'asc' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-gray-50 text-gray-500 border border-transparent'}`}
-                  >
-                    <ArrowUpNarrowWide className="w-4 h-4" /> Ascending
-                  </button>
-                  <button
-                    onClick={() => setSortOrder('desc')}
-                    className={`flex-1 py-4 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${sortOrder === 'desc' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-gray-50 text-gray-500 border border-transparent'}`}
-                  >
-                    <ArrowDownWideNarrow className="w-4 h-4" /> Descending
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-3 pt-4">
-                <div 
-                  onClick={() => setFoldersFirst(!foldersFirst)}
-                  className="flex items-center justify-between p-5 bg-gray-50 rounded-[2rem] active:bg-gray-100 transition-colors cursor-pointer group"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={`p-3 rounded-2xl transition-colors ${foldersFirst ? 'bg-indigo-100 text-indigo-600' : 'bg-white text-gray-400'}`}>
-                      <FolderTree className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-gray-800">Folders always first</p>
-                      <p className="text-[10px] text-gray-400 font-medium">Keep folders grouped at the top</p>
-                    </div>
-                  </div>
-                  <div className={`w-12 h-6 rounded-full relative transition-colors ${foldersFirst ? 'bg-indigo-600' : 'bg-gray-200'}`}>
-                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${foldersFirst ? 'left-7' : 'left-1'}`} />
-                  </div>
-                </div>
-              </div>
-              <button 
-                onClick={() => setIsSortMenuOpen(false)}
-                className="w-full py-5 bg-gray-900 text-white rounded-[2rem] font-black text-sm active:scale-[0.98] transition-all shadow-xl shadow-gray-200 mt-4"
-              >
-                Apply Settings
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* FAB Container */}
       {!isSelectionMode && (
-        <div className="fixed bottom-6 right-6 flex flex-col gap-4 z-30 pb-safe">
+        <div className="fixed bottom-8 right-8 flex flex-col gap-4 z-30 pb-safe">
           <button 
-            onClick={handleUploadClick}
+            onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="w-14 h-14 bg-indigo-600 text-white rounded-[1.5rem] shadow-xl flex items-center justify-center active:scale-90 transition-all disabled:opacity-50"
+            className="w-16 h-16 bg-indigo-600 text-white rounded-[1.8rem] shadow-2xl shadow-indigo-100 flex items-center justify-center active:scale-90 transition-all"
           >
-            {uploading ? <RefreshCw className="w-6 h-6 animate-spin" /> : <Plus className="w-8 h-8" />}
+            {uploading ? <RefreshCw className="w-7 h-7 animate-spin" /> : <Plus className="w-9 h-9" />}
           </button>
-          <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
+          <input type="file" ref={fileInputRef} className="hidden" onChange={async (e) => {
+             const file = e.target.files?.[0]; if (!file) return;
+             setUploading(true); try { await serviceRef.current.uploadFile(path, file); await fetchFiles(path, true); } catch (err: any) { setErrorMsg(`Upload failed: ${err.message}`); } finally { setUploading(false); }
+          }} />
         </div>
       )}
 
       {path !== '/' && !isSelectionMode && (
-        <button 
-          onClick={goBack}
-          className="fixed bottom-6 left-6 w-12 h-12 bg-white text-indigo-600 rounded-[1.2rem] shadow-lg border border-indigo-50 flex items-center justify-center active:scale-90 transition-all z-30 mb-safe ml-safe"
-        >
-          <ArrowLeft className="w-6 h-6" />
+        <button onClick={goBack} className="fixed bottom-8 left-8 w-14 h-14 bg-white text-indigo-600 rounded-[1.5rem] shadow-xl border border-indigo-50 flex items-center justify-center z-30 mb-safe ml-safe active:scale-90 transition-all">
+          <ArrowLeft className="w-7 h-7" />
         </button>
       )}
 
-      {uploading && (
-        <div className="fixed bottom-24 right-6 bg-indigo-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 z-40 mb-safe animate-bounce">
-          <Upload className="w-4 h-4" />
-          <span className="text-[10px] font-black uppercase tracking-widest">Uploading</span>
+      {/* Preview Sheet */}
+      {selectedFile && <ActionSheet file={selectedFile.file} path={selectedFile.path} config={config} onClose={() => setSelectedFile(null)} onRefresh={() => fetchFiles(path, true)} />}
+      
+      {/* Batch Selection Bar */}
+      {isSelectionMode && (
+        <div className="fixed bottom-8 left-6 right-6 z-50 animate-in slide-in-from-bottom-6 duration-400">
+          <div className="w-full bg-gray-900 text-white rounded-[2.2rem] p-4.5 shadow-2xl flex items-center justify-between border border-white/5 backdrop-blur-lg">
+             <div className="flex items-center gap-3.5 ml-2">
+                <button onClick={() => {setIsSelectionMode(false); setSelectedItemNames(new Set());}} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X className="w-5 h-5" /></button>
+                <div className="flex flex-col"><span className="text-sm font-black tracking-tight">{selectedItemNames.size}</span><span className="text-[8px] text-gray-400 font-bold uppercase tracking-[0.2em]">Selected</span></div>
+             </div>
+             <div className="flex gap-2.5">
+                <button onClick={async () => {
+                   setBatchActionLoading(true); try {
+                     for (const name of selectedItemNames) {
+                       const detail = await serviceRef.current.getFileDetail((path === '/' ? '' : path) + '/' + name);
+                       const a = document.createElement('a'); a.href = detail.data.raw_url; a.download = name; a.click(); await new Promise(r => setTimeout(r, 600));
+                     }
+                     setIsSelectionMode(false); setSelectedItemNames(new Set());
+                   } catch (err: any) { setErrorMsg(err.message); } finally { setBatchActionLoading(false); }
+                }} className="p-3.5 bg-white/10 rounded-[1.2rem] hover:bg-white/20 transition-colors"><Download className="w-5 h-5" /></button>
+                <button onClick={() => setShowBatchDeleteConfirm(true)} className="p-3.5 bg-red-600 rounded-[1.2rem] hover:bg-red-500 shadow-lg shadow-red-900/20 transition-colors"><Trash2 className="w-5 h-5" /></button>
+             </div>
+          </div>
         </div>
       )}
 
-      {selectedFile && (
-        <ActionSheet 
-          file={selectedFile.file} 
-          path={selectedFile.path}
-          config={config}
-          onClose={() => setSelectedFile(null)}
-          onRefresh={() => fetchFiles(path, true)}
-        />
+      {/* Delete Prompt */}
+      {showBatchDeleteConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/40 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2.8rem] p-9 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-300">
+             <div className="flex flex-col items-center text-center">
+               <div className="w-16 h-16 bg-red-50 rounded-[1.8rem] flex items-center justify-center mb-7">
+                  <Trash2 className="w-8 h-8 text-red-500" />
+               </div>
+               <h3 className="text-xl font-black text-gray-900 mb-3 tracking-tight">Delete {selectedItemNames.size} Items?</h3>
+               <p className="text-[13px] text-gray-500 leading-relaxed mb-10 px-4">This action is permanent and cannot be reversed. Proceed with caution.</p>
+               <div className="grid grid-cols-2 gap-4 w-full">
+                 <button onClick={() => setShowBatchDeleteConfirm(false)} className="py-4.5 bg-gray-50 text-gray-600 rounded-[1.4rem] font-bold active:scale-95 transition-all">Cancel</button>
+                 <button onClick={async () => {
+                    setBatchActionLoading(true); try { await serviceRef.current.deleteFiles(path, Array.from(selectedItemNames)); await fetchFiles(path, true); setIsSelectionMode(false); setSelectedItemNames(new Set()); } catch (err: any) { setErrorMsg(err.message); } finally { setBatchActionLoading(false); setShowBatchDeleteConfirm(false); }
+                 }} className="py-4.5 bg-red-600 text-white rounded-[1.4rem] font-bold shadow-xl shadow-red-100 active:scale-95 transition-all">Delete All</button>
+               </div>
+             </div>
+          </div>
+        </div>
       )}
     </div>
   );
