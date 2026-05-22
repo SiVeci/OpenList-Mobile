@@ -32,10 +32,10 @@ jobs:
         run: npm ci
 
       - name: Build Android APK
-        run: cd android && ./gradlew assembleDebug --no-daemon
+        run: cd android && ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: OpenListMobile-Debug-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: OpenListMobile-Release-APK
+          path: android/app/build/outputs/apk/release/app-release.apk
