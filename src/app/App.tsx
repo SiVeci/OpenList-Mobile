@@ -18,7 +18,6 @@ import DownloadScreen from './DownloadScreen';
 import SyncScreen from './SyncScreen';
 import { useAppStore } from '../stores/appStore';
 import { syncService } from '../services/syncService';
-import BackgroundTimer from 'react-native-background-timer';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -190,13 +189,11 @@ function App() {
     runSyncTasks();
 
     // Check rules every 1 minute
-    BackgroundTimer.runBackgroundTimer(() => {
+    const interval = setInterval(() => {
       runSyncTasks();
     }, 60000);
 
-    return () => {
-      BackgroundTimer.stopBackgroundTimer();
-    };
+    return () => clearInterval(interval);
   }, [config, syncRules, setLastSyncTime]);
 
   return (
