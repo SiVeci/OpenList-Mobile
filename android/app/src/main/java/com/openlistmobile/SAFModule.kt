@@ -120,7 +120,7 @@ class SAFModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun pickDirectory(promise: Promise) {
-        val activity = currentActivity
+        val activity = getCurrentActivity()
         if (activity == null) {
             promise.reject("NO_ACTIVITY", "No current activity")
             return
@@ -144,7 +144,7 @@ class SAFModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun pickFile(promise: Promise) {
-        val activity = currentActivity
+        val activity = getCurrentActivity()
         if (activity == null) {
             promise.reject("NO_ACTIVITY", "No current activity")
             return
