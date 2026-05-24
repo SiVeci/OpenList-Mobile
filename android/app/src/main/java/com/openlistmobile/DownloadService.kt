@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
@@ -78,7 +79,11 @@ class DownloadService : Service() {
         activeDownloads[fileName] = false // false means not cancelled
 
         val notification = buildNotification(notifId, fileName, 0, fileSize)
-        startForeground(notifId, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(notifId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(notifId, notification)
+        }
 
         Thread {
             performDownload(url, treeUriStr, fileName, fileSize, mimeType, headerAuth, notifId)
