@@ -21,6 +21,7 @@
     "react-native": "0.85.3",
     "react-native-blob-util": "^0.24.9",
     "react-native-device-info": "^15.0.2",
+    "react-native-gesture-handler": "^2.31.2",
     "react-native-paper": "^5.13.5",
     "react-native-safe-area-context": "^5.5.2",
     "react-native-screens": "^4.11.1",
