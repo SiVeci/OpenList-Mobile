@@ -53,16 +53,11 @@ class DownloadService {
     const service = new AListService(config);
     const detail = await service.getFileDetail(remotePath);
     
-    const baseUrl = config.url.endsWith('/') ? config.url.slice(0, -1) : config.url;
-    const encodedPath = remotePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
-    const sign = detail.data.sign || '';
-    const signQuery = sign ? `?sign=${sign}` : '';
-    const downloadUrl = `${baseUrl}/d${encodedPath}${signQuery}`;
-
+    const rawUrl = detail.data.raw_url;
     const fileName = remotePath.split('/').pop() || 'download';
     const authHeader = config.token;
 
-    return DownloadNative.startDownload(downloadUrl, localDirUri, fileName, fileSize, mimeType, authHeader);
+    return DownloadNative.startDownload(rawUrl, localDirUri, fileName, fileSize, mimeType, authHeader);
   }
 
   async cancelDownload(fileName: string): Promise<boolean> {
