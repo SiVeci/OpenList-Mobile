@@ -133,19 +133,27 @@ function App() {
 
       if (shareData.action === 'send' && shareData.uri) {
         let fileName = 'shared_file';
-        try {
-          const detail = await localFsService.getFileDetail(shareData.uri);
-          if (detail.name) fileName = detail.name;
-        } catch {}
+        if (shareData.uri.startsWith('file://')) {
+          fileName = decodeURIComponent(shareData.uri.split('/').pop() || 'shared_file');
+        } else {
+          try {
+            const detail = await localFsService.getFileDetail(shareData.uri);
+            if (detail.name) fileName = detail.name;
+          } catch {}
+        }
         await service.uploadFile(targetPath, shareData.uri, fileName, shareData.mimeType);
       } 
       else if (shareData.action === 'send_multiple' && shareData.uris) {
         for (let i = 0; i < shareData.uris.length; i++) {
           let fileName = `shared_file_${i}`;
-          try {
-            const detail = await localFsService.getFileDetail(shareData.uris[i]);
-            if (detail.name) fileName = detail.name;
-          } catch {}
+          if (shareData.uris[i].startsWith('file://')) {
+            fileName = decodeURIComponent(shareData.uris[i].split('/').pop() || fileName);
+          } else {
+            try {
+              const detail = await localFsService.getFileDetail(shareData.uris[i]);
+              if (detail.name) fileName = detail.name;
+            } catch {}
+          }
           await service.uploadFile(targetPath, shareData.uris[i], fileName, shareData.mimeType);
         }
       }

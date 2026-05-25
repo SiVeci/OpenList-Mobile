@@ -14,6 +14,7 @@ import { useAppStore } from '../stores/appStore';
 import { useAuthStore } from '../stores/authStore';
 import { syncService, SyncRule } from '../services/syncService';
 import { localFsService } from '../services/localFsService';
+import RemoteDirPicker from '../components/RemoteDirPicker';
 
 const SyncScreen = () => {
   const config = useAuthStore(state => state.config);
@@ -31,6 +32,7 @@ const SyncScreen = () => {
   const [newRuleInterval, setNewRuleInterval] = useState('60');
   const [newRuleWifiOnly, setNewRuleWifiOnly] = useState(true);
   const [newRuleChargingOnly, setNewRuleChargingOnly] = useState(false);
+  const [isPickerVisible, setIsPickerVisible] = useState(false);
 
   const pickLocalDir = async () => {
     try {
@@ -200,13 +202,22 @@ const SyncScreen = () => {
               mode="outlined"
               style={styles.dialogInput}
             />
-            <TextInput
-              label="Remote Path"
-              value={newRuleRemotePath}
-              onChangeText={setNewRuleRemotePath}
-              mode="outlined"
-              style={styles.dialogInput}
-            />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <TextInput
+                label="Remote Path"
+                value={newRuleRemotePath}
+                onChangeText={setNewRuleRemotePath}
+                mode="outlined"
+                style={{ flex: 1 }}
+              />
+              <Button 
+                mode="contained-tonal" 
+                onPress={() => setIsPickerVisible(true)}
+                style={{ marginTop: 6 }}
+              >
+                Browse
+              </Button>
+            </View>
             <Button
               mode="outlined"
               onPress={pickLocalDir}
@@ -260,6 +271,15 @@ const SyncScreen = () => {
             <Button onPress={handleAddRule}>Create</Button>
           </Dialog.Actions>
         </Dialog>
+
+        <RemoteDirPicker 
+          visible={isPickerVisible} 
+          onDismiss={() => setIsPickerVisible(false)}
+          onSelect={(p) => {
+            setNewRuleRemotePath(p);
+            setIsPickerVisible(false);
+          }}
+        />
       </Portal>
     </View>
   );
