@@ -406,6 +406,22 @@ class SAFModule(reactContext: ReactApplicationContext) :
                     throw Exception("Error: Server returned an HTML page instead of the file.")
                 }
 
+
+                val contentType = connection.contentType ?: "unknown"
+                if (!mimeType.contains("html", ignoreCase = true) && contentType.contains("text/html", ignoreCase = true)) {
+                    val snippet = try {
+                        connection.inputStream.bufferedReader().use { it.readText().take(100) }
+                    } catch (e: Exception) {
+                        "Could not read snippet"
+                    }
+                    
+                    connection.disconnect()
+                    DocumentsContract.deleteDocument(contentResolver, newDocUri)
+                    
+                    val errorMsg = "DIAGNOSTIC INFO:\nURL: $currentUrl\nCode: ${connection.responseCode}\nType: $contentType\nSnippet: $snippet..."
+                    throw Exception(errorMsg)
+                }
+
                 connection.inputStream.use { inputStream ->
                     contentResolver.openOutputStream(newDocUri)?.use { outputStream ->
                         val buffer = ByteArray(8192)

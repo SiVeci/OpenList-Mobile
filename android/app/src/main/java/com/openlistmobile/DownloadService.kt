@@ -170,6 +170,22 @@ class DownloadService : Service() {
 
 
 
+
+            val contentType = connection.contentType ?: "unknown"
+            if (!mimeType.contains("html", ignoreCase = true) && contentType.contains("text/html", ignoreCase = true)) {
+                val snippet = try {
+                    connection.inputStream.bufferedReader().use { it.readText().take(100) }
+                } catch (e: Exception) {
+                    "Could not read snippet"
+                }
+                
+                connection.disconnect()
+                DocumentsContract.deleteDocument(contentResolver, newDocUri)
+                
+                val errorMsg = "DIAGNOSTIC INFO:\nURL: $currentUrl\nCode: ${connection.responseCode}\nType: $contentType\nSnippet: $snippet..."
+                throw Exception(errorMsg)
+            }
+
             val inputStream = connection.inputStream
             val outputStream = contentResolver.openOutputStream(newDocUri)
                 ?: throw Exception("Failed to open output stream")
