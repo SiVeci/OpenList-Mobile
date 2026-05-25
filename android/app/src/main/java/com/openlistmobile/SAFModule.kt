@@ -399,14 +399,6 @@ class SAFModule(reactContext: ReactApplicationContext) :
 
                 if (connection == null) throw Exception("Failed to connect after $maxRedirects redirects")
 
-                val contentType = connection.contentType ?: ""
-                if (!mimeType.contains("html", ignoreCase = true) && contentType.contains("text/html", ignoreCase = true)) {
-                    connection.disconnect()
-                    DocumentsContract.deleteDocument(contentResolver, newDocUri)
-                    throw Exception("Error: Server returned an HTML page instead of the file.")
-                }
-
-
                 val contentType = connection.contentType ?: "unknown"
                 if (!mimeType.contains("html", ignoreCase = true) && contentType.contains("text/html", ignoreCase = true)) {
                     val snippet = try {
