@@ -394,6 +394,16 @@ class SAFModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    
+    private fun getSafeUrl(urlStr: String): String {
+        return try {
+            val urlObj = java.net.URL(urlStr)
+            java.net.URI(urlObj.protocol, urlObj.userInfo, urlObj.host, urlObj.port, urlObj.path, urlObj.query, urlObj.ref).toASCIIString()
+        } catch (e: Exception) {
+            urlStr.replace(" ", "%20")
+        }
+    }
+
     private fun trustAllCertificates() {
         try {
             val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
@@ -402,7 +412,7 @@ class SAFModule(reactContext: ReactApplicationContext) :
                 override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
             })
 
-            val sc = SSLContext.getInstance("SSL")
+            val sc = SSLContext.getInstance("TLS")
             sc.init(null, trustAllCerts, java.security.SecureRandom())
             HttpsURLConnection.setDefaultSSLSocketFactory(sc.socketFactory)
             HttpsURLConnection.setDefaultHostnameVerifier { _, _ -> true }

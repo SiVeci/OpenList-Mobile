@@ -119,7 +119,7 @@ class DownloadService : Service() {
             val newDocUri = DocumentsContract.createDocument(contentResolver, parentUri, mimeType, fileName)
                 ?: throw Exception("Failed to create document")
 
-            var currentUrl = url.replace(" ", "%20")
+            var currentUrl = getSafeUrl(url)
             var connection: java.net.HttpURLConnection? = null
             var redirectCount = 0
             val maxRedirects = 5
@@ -127,10 +127,14 @@ class DownloadService : Service() {
             while (redirectCount < maxRedirects) {
                 val conn = java.net.URL(currentUrl).openConnection() as java.net.HttpURLConnection
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                if (headerAuth.isNotEmpty()) {
+                
+                val currentHost = java.net.URL(currentUrl).host
+                val originalHost = java.net.URL(url).host
+                if (headerAuth.isNotEmpty() && currentHost == originalHost) {
                     conn.setRequestProperty("Authorization", headerAuth)
                     conn.setRequestProperty("AList-Token", headerAuth)
                 }
+                
                 conn.connectTimeout = 30000
                 conn.readTimeout = 30000
                 conn.instanceFollowRedirects = false // we handle it manually
@@ -144,8 +148,11 @@ class DownloadService : Service() {
                     var newUrl = conn.getHeaderField("Location")
                     conn.disconnect()
                     if (newUrl == null) throw Exception("Redirect without Location header")
-                    newUrl = newUrl.replace(" ", "%20")
-                    currentUrl = newUrl
+                    
+                    if (!newUrl.startsWith("http")) {
+                        newUrl = java.net.URL(java.net.URL(currentUrl), newUrl).toString()
+                    }
+                    currentUrl = getSafeUrl(newUrl)
                     redirectCount++
                     continue
                 }
@@ -282,6 +289,16 @@ class DownloadService : Service() {
             ?.emit(eventName, params)
     }
 
+    
+    private fun getSafeUrl(urlStr: String): String {
+        return try {
+            val urlObj = java.net.URL(urlStr)
+            java.net.URI(urlObj.protocol, urlObj.userInfo, urlObj.host, urlObj.port, urlObj.path, urlObj.query, urlObj.ref).toASCIIString()
+        } catch (e: Exception) {
+            urlStr.replace(" ", "%20")
+        }
+    }
+
     private fun trustAllCertificates() {
         try {
             val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
@@ -290,7 +307,7 @@ class DownloadService : Service() {
                 override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
             })
 
-            val sc = SSLContext.getInstance("SSL")
+            val sc = SSLContext.getInstance("TLS")
             sc.init(null, trustAllCerts, java.security.SecureRandom())
             HttpsURLConnection.setDefaultSSLSocketFactory(sc.socketFactory)
             HttpsURLConnection.setDefaultHostnameVerifier { _, _ -> true }
