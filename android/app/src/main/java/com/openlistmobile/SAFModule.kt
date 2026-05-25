@@ -317,13 +317,45 @@ class SAFModule(reactContext: ReactApplicationContext) :
                 val newDocUri = DocumentsContract.createDocument(contentResolver, parentUri, mimeType, fileName)
                     ?: throw Exception("Failed to create document")
 
-                val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-                if (headerAuth.isNotEmpty()) {
-                    connection.setRequestProperty("Authorization", headerAuth)
-                    connection.setRequestProperty("AList-Token", headerAuth)
+                var currentUrl = url
+                var connection: java.net.HttpURLConnection? = null
+                var redirectCount = 0
+                val maxRedirects = 5
+
+                while (redirectCount < maxRedirects) {
+                    val conn = java.net.URL(currentUrl).openConnection() as java.net.HttpURLConnection
+                    if (headerAuth.isNotEmpty()) {
+                        conn.setRequestProperty("Authorization", headerAuth)
+                        conn.setRequestProperty("AList-Token", headerAuth)
+                    }
+                    conn.connectTimeout = 30000
+                    conn.readTimeout = 30000
+                    conn.instanceFollowRedirects = false // we handle it manually
+                    
+                    val status = conn.responseCode
+                    if (status == java.net.HttpURLConnection.HTTP_MOVED_TEMP || 
+                        status == java.net.HttpURLConnection.HTTP_MOVED_PERM || 
+                        status == java.net.HttpURLConnection.HTTP_SEE_OTHER ||
+                        status == 307 || status == 308) {
+                        
+                        val newUrl = conn.getHeaderField("Location")
+                        conn.disconnect()
+                        if (newUrl == null) throw Exception("Redirect without Location header")
+                        currentUrl = newUrl
+                        redirectCount++
+                        continue
+                    }
+                    
+                    if (status != java.net.HttpURLConnection.HTTP_OK) {
+                        conn.disconnect()
+                        throw Exception("Server returned HTTP $status")
+                    }
+                    
+                    connection = conn
+                    break
                 }
-                connection.connectTimeout = 30000
-                connection.readTimeout = 30000
+
+                if (connection == null) throw Exception("Failed to connect after $maxRedirects redirects")
 
                 connection.inputStream.use { inputStream ->
                     contentResolver.openOutputStream(newDocUri)?.use { outputStream ->
