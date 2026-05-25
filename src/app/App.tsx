@@ -1,5 +1,5 @@
 import React from 'react';
-import { StatusBar } from 'react-native';
+import { StatusBar, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -16,6 +16,7 @@ import FileBrowserScreen from './FileBrowserScreen';
 import LocalBrowserScreen from './LocalBrowserScreen';
 import DownloadScreen from './DownloadScreen';
 import SyncScreen from './SyncScreen';
+import RemoteDirPicker from '../components/RemoteDirPicker';
 import { useAppStore } from '../stores/appStore';
 import { syncService } from '../services/syncService';
 
@@ -97,6 +98,7 @@ function App() {
   const [shareData, setShareData] = React.useState<ShareEventData | null>(null);
   const [sharePath, setSharePath] = React.useState('/');
   const [isUploadingShare, setIsUploadingShare] = React.useState(false);
+  const [isPickerVisible, setIsPickerVisible] = React.useState(false);
 
   React.useEffect(() => {
     // Check initially and set up listener
@@ -214,19 +216,38 @@ function App() {
           <Dialog visible={!!shareData} onDismiss={handleCancelShare}>
             <Dialog.Title>Upload Shared File</Dialog.Title>
             <Dialog.Content>
-              <TextInput
-                label="Target Directory Path"
-                value={sharePath}
-                onChangeText={setSharePath}
-                mode="outlined"
-                placeholder="/"
-              />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TextInput
+                  label="Target Directory Path"
+                  value={sharePath}
+                  onChangeText={setSharePath}
+                  mode="outlined"
+                  placeholder="/"
+                  style={{ flex: 1 }}
+                />
+                <Button 
+                  mode="contained-tonal" 
+                  onPress={() => setIsPickerVisible(true)}
+                  style={{ marginTop: 6 }}
+                >
+                  Browse
+                </Button>
+              </View>
             </Dialog.Content>
             <Dialog.Actions>
               <Button onPress={handleCancelShare} disabled={isUploadingShare}>Cancel</Button>
               <Button onPress={handleUploadShare} loading={isUploadingShare} disabled={isUploadingShare}>Upload</Button>
             </Dialog.Actions>
           </Dialog>
+
+          <RemoteDirPicker 
+            visible={isPickerVisible} 
+            onDismiss={() => setIsPickerVisible(false)}
+            onSelect={(p) => {
+              setSharePath(p);
+              setIsPickerVisible(false);
+            }}
+          />
         </Portal>
         
       </PaperProvider>
