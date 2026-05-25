@@ -167,7 +167,12 @@ class SAFModule(reactContext: ReactApplicationContext) :
         try {
             val treeUri = Uri.parse(treeUriStr)
             val contentResolver = reactApplicationContext.contentResolver
-            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, DocumentsContract.getDocumentId(treeUri))
+            val docId = if (DocumentsContract.isDocumentUri(reactApplicationContext, treeUri)) {
+                DocumentsContract.getDocumentId(treeUri)
+            } else {
+                DocumentsContract.getTreeDocumentId(treeUri)
+            }
+            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
             val result: WritableArray = Arguments.createArray()
 
             contentResolver.query(
@@ -231,7 +236,11 @@ class SAFModule(reactContext: ReactApplicationContext) :
         try {
             val treeUri = Uri.parse(treeUriStr)
             val contentResolver = reactApplicationContext.contentResolver
-            val docId = DocumentsContract.getDocumentId(treeUri)
+            val docId = if (DocumentsContract.isDocumentUri(reactApplicationContext, treeUri)) {
+                DocumentsContract.getDocumentId(treeUri)
+            } else {
+                DocumentsContract.getTreeDocumentId(treeUri)
+            }
             val parentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
 
             val newDocUri = DocumentsContract.createDocument(contentResolver, parentUri, mimeType, fileName)
@@ -293,7 +302,11 @@ class SAFModule(reactContext: ReactApplicationContext) :
             try {
                 val treeUri = Uri.parse(treeUriStr)
                 val contentResolver = reactApplicationContext.contentResolver
-                val docId = DocumentsContract.getDocumentId(treeUri)
+                val docId = if (DocumentsContract.isDocumentUri(reactApplicationContext, treeUri)) {
+                    DocumentsContract.getDocumentId(treeUri)
+                } else {
+                    DocumentsContract.getTreeDocumentId(treeUri)
+                }
                 val parentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
 
                 val newDocUri = DocumentsContract.createDocument(contentResolver, parentUri, mimeType, fileName)
@@ -327,7 +340,7 @@ class SAFModule(reactContext: ReactApplicationContext) :
 
     private fun getDirName(contentResolver: ContentResolver, treeUri: Uri): String {
         return try {
-            val docId = DocumentsContract.getDocumentId(treeUri)
+            val docId = DocumentsContract.getTreeDocumentId(treeUri)
             val parts = docId.split(":")
             parts.lastOrNull() ?: "Unknown"
         } catch (e: Exception) {

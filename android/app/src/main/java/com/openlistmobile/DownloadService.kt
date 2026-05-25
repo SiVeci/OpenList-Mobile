@@ -104,7 +104,11 @@ class DownloadService : Service() {
         try {
             val treeUri = Uri.parse(treeUriStr)
             val contentResolver = contentResolver
-            val docId = DocumentsContract.getDocumentId(treeUri)
+            val docId = if (DocumentsContract.isDocumentUri(this, treeUri)) {
+                DocumentsContract.getDocumentId(treeUri)
+            } else {
+                DocumentsContract.getTreeDocumentId(treeUri)
+            }
             val parentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
 
             val newDocUri = DocumentsContract.createDocument(contentResolver, parentUri, mimeType, fileName)
