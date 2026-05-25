@@ -17,6 +17,10 @@ import androidx.core.app.NotificationCompat
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 class DownloadService : Service() {
 
@@ -102,6 +106,7 @@ class DownloadService : Service() {
         notifId: Int
     ) {
         try {
+            trustAllCertificates()
             val treeUri = Uri.parse(treeUriStr)
             val contentResolver = contentResolver
             val docId = if (DocumentsContract.isDocumentUri(this, treeUri)) {
@@ -234,5 +239,22 @@ class DownloadService : Service() {
         DownloadModule.reactContextInstance
             ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
             ?.emit(eventName, params)
+    }
+
+    private fun trustAllCertificates() {
+        try {
+            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+                override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+                override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
+            })
+
+            val sc = SSLContext.getInstance("SSL")
+            sc.init(null, trustAllCerts, java.security.SecureRandom())
+            HttpsURLConnection.setDefaultSSLSocketFactory(sc.socketFactory)
+            HttpsURLConnection.setDefaultHostnameVerifier { _, _ -> true }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to trust all certificates", e)
+        }
     }
 }
