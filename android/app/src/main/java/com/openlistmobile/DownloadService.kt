@@ -119,13 +119,14 @@ class DownloadService : Service() {
             val newDocUri = DocumentsContract.createDocument(contentResolver, parentUri, mimeType, fileName)
                 ?: throw Exception("Failed to create document")
 
-            var currentUrl = url
+            var currentUrl = url.replace(" ", "%20")
             var connection: java.net.HttpURLConnection? = null
             var redirectCount = 0
             val maxRedirects = 5
 
             while (redirectCount < maxRedirects) {
                 val conn = java.net.URL(currentUrl).openConnection() as java.net.HttpURLConnection
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 if (headerAuth.isNotEmpty()) {
                     conn.setRequestProperty("Authorization", headerAuth)
                     conn.setRequestProperty("AList-Token", headerAuth)
@@ -140,9 +141,10 @@ class DownloadService : Service() {
                     status == java.net.HttpURLConnection.HTTP_SEE_OTHER ||
                     status == 307 || status == 308) {
                     
-                    val newUrl = conn.getHeaderField("Location")
+                    var newUrl = conn.getHeaderField("Location")
                     conn.disconnect()
                     if (newUrl == null) throw Exception("Redirect without Location header")
+                    newUrl = newUrl.replace(" ", "%20")
                     currentUrl = newUrl
                     redirectCount++
                     continue
@@ -158,6 +160,13 @@ class DownloadService : Service() {
             }
 
             if (connection == null) throw Exception("Failed to connect after $maxRedirects redirects")
+
+            val contentType = connection.contentType ?: ""
+            if (!mimeType.contains("html", ignoreCase = true) && contentType.contains("text/html", ignoreCase = true)) {
+                connection.disconnect()
+                DocumentsContract.deleteDocument(contentResolver, newDocUri)
+                throw Exception("Error: Server returned an HTML page instead of the file.")
+            }
 
             val inputStream = connection.inputStream
             val outputStream = contentResolver.openOutputStream(newDocUri)
