@@ -158,8 +158,11 @@ class DownloadService : Service() {
                 }
                 
                 if (status != java.net.HttpURLConnection.HTTP_OK) {
+                    val snippet = try {
+                        conn.errorStream?.bufferedReader()?.use { it.readText().take(200) } ?: conn.inputStream?.bufferedReader()?.use { it.readText().take(200) } ?: "No response body"
+                    } catch (e: Exception) { "Could not read error body" }
                     conn.disconnect()
-                    throw Exception("Server returned HTTP $status")
+                    throw Exception("DIAGNOSTIC HTTP $status:\nURL: $currentUrl\nSnippet: $snippet...")
                 }
                 
                 connection = conn
@@ -172,17 +175,18 @@ class DownloadService : Service() {
 
 
             val contentType = connection.contentType ?: "unknown"
+            val contentLength = connection.contentLength
             if (!mimeType.contains("html", ignoreCase = true) && contentType.contains("text/html", ignoreCase = true)) {
                 val snippet = try {
-                    connection.inputStream.bufferedReader().use { it.readText().take(100) }
+                    connection.inputStream.bufferedReader().use { it.readText().take(200) }
                 } catch (e: Exception) {
                     "Could not read snippet"
                 }
                 
                 connection.disconnect()
-                DocumentsContract.deleteDocument(contentResolver, newDocUri)
+                try { DocumentsContract.deleteDocument(contentResolver, newDocUri) } catch (e: Exception) {}
                 
-                val errorMsg = "DIAGNOSTIC INFO:\nURL: $currentUrl\nCode: ${connection.responseCode}\nType: $contentType\nSnippet: $snippet..."
+                val errorMsg = "DIAGNOSTIC INFO:\nReqURL: $currentUrl\nRespCode: ${connection.responseCode}\nType: $contentType\nLen: $contentLength\nExpectedLen: $fileSize\nSnippet: $snippet..."
                 throw Exception(errorMsg)
             }
 
