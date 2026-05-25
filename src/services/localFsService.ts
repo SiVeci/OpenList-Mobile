@@ -21,6 +21,10 @@ class LocalFsService {
     return NativeSAF.writeFile(treeUri, fileName, base64Data, mimeType);
   }
 
+  async copyFileToSAF(sourcePath: string, treeUriStr: string, fileName: string, mimeType: string): Promise<string> {
+    return NativeSAF.copyFileToSAF(sourcePath, treeUriStr, fileName, mimeType);
+  }
+
   async downloadFileToSAF(url: string, treeUriStr: string, fileName: string, mimeType: string, headerAuth: string): Promise<string> {
     return NativeSAF.downloadFileToSAF(url, treeUriStr, fileName, mimeType, headerAuth);
   }

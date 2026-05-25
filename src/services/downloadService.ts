@@ -1,7 +1,8 @@
 import { AListService } from './alistService';
-import DownloadNative, { onProgress, onComplete, onError, onCancelled } from '../native/NativeDownload';
 import { ServerConfig } from '../types';
-import { EmitterSubscription } from 'react-native';
+import ReactNativeBlobUtil from 'react-native-blob-util';
+import { localFsService } from './localFsService';
+import { DeviceEventEmitter, EmitterSubscription } from 'react-native';
 
 export interface DownloadTask {
   id: string;
@@ -16,6 +17,7 @@ export interface DownloadTask {
 
 class DownloadService {
   private subscriptions: EmitterSubscription[] = [];
+  private activeTasks: Map<string, any> = new Map();
 
   initListeners(
     onProgressCb?: (fileName: string, progress: number) => void,
@@ -25,16 +27,16 @@ class DownloadService {
   ) {
     this.removeAllListeners();
     if (onProgressCb) {
-      this.subscriptions.push(onProgress(data => onProgressCb(data.fileName, data.progress)));
+      this.subscriptions.push(DeviceEventEmitter.addListener('onDownloadProgress', data => onProgressCb(data.fileName, data.progress)));
     }
     if (onCompleteCb) {
-      this.subscriptions.push(onComplete(data => onCompleteCb(data.fileName, data.uri)));
+      this.subscriptions.push(DeviceEventEmitter.addListener('onDownloadComplete', data => onCompleteCb(data.fileName, data.uri)));
     }
     if (onErrorCb) {
-      this.subscriptions.push(onError(data => onErrorCb(data.fileName, data.error)));
+      this.subscriptions.push(DeviceEventEmitter.addListener('onDownloadError', data => onErrorCb(data.fileName, data.error)));
     }
     if (onCancelCb) {
-      this.subscriptions.push(onCancelled(data => onCancelCb(data.fileName)));
+      this.subscriptions.push(DeviceEventEmitter.addListener('onDownloadCancelled', data => onCancelCb(data.fileName)));
     }
   }
 
@@ -57,11 +59,88 @@ class DownloadService {
     const fileName = remotePath.split('/').pop() || 'download';
     const authHeader = config.token;
 
-    return DownloadNative.startDownload(rawUrl, localDirUri, fileName, fileSize, mimeType, authHeader);
+    // Use react-native-blob-util to download to cache dir
+    const dirs = ReactNativeBlobUtil.fs.dirs;
+    const cachePath = `${dirs.CacheDir}/${fileName}`;
+
+    // Ensure previous file is deleted
+    try { await ReactNativeBlobUtil.fs.unlink(cachePath); } catch (e) {}
+
+    let lastProgress = 0;
+    
+    // Create the task
+    const task = ReactNativeBlobUtil.config({
+      path: cachePath,
+      fileCache: true,
+      trusty: true, // Bypass SSL validation if needed
+    }).fetch('GET', rawUrl, {
+      'Authorization': authHeader,
+      'AList-Token': authHeader,
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    });
+
+    this.activeTasks.set(fileName, task);
+
+    task.progress((received, total) => {
+      const progress = Math.round((Number(received) / Number(total)) * 100);
+      if (progress > lastProgress) {
+        lastProgress = progress;
+        DeviceEventEmitter.emit('onDownloadProgress', { fileName, progress });
+      }
+    });
+
+    try {
+      const res = await task;
+      const status = res.info().status;
+      
+      if (status !== 200) {
+        throw new Error(`Server returned HTTP ${status}`);
+      }
+
+      // Ensure file actually exists and isn't empty
+      const stat = await ReactNativeBlobUtil.fs.stat(cachePath);
+      if (stat.size === 0) {
+          throw new Error('Downloaded file is empty (0 bytes).');
+      }
+      
+      // Simple HTML check on file size to prevent 38KB HTML issue silently passing
+      if (stat.size < 100 * 1024 && !mimeType.includes('html')) {
+          const firstBytes = await ReactNativeBlobUtil.fs.readFile(cachePath, 'utf8');
+          if (firstBytes.trim().startsWith('<') && firstBytes.toLowerCase().includes('<html')) {
+              throw new Error('Server returned an HTML page instead of the file.');
+          }
+      }
+
+      // Copy to SAF
+      const safUri = await localFsService.copyFileToSAF(cachePath, localDirUri, fileName, mimeType || 'application/octet-stream');
+      
+      // Cleanup cache
+      await ReactNativeBlobUtil.fs.unlink(cachePath);
+
+      DeviceEventEmitter.emit('onDownloadComplete', { fileName, uri: safUri });
+      this.activeTasks.delete(fileName);
+      return true;
+
+    } catch (e: any) {
+      if (e.message && e.message.includes('cancel')) {
+         DeviceEventEmitter.emit('onDownloadCancelled', { fileName });
+      } else {
+         DeviceEventEmitter.emit('onDownloadError', { fileName, error: e.message || 'Download failed' });
+      }
+      this.activeTasks.delete(fileName);
+      try { await ReactNativeBlobUtil.fs.unlink(cachePath); } catch (err) {}
+      return false;
+    }
   }
 
   async cancelDownload(fileName: string): Promise<boolean> {
-    return DownloadNative.cancelDownload(fileName);
+    const task = this.activeTasks.get(fileName);
+    if (task) {
+      task.cancel();
+      this.activeTasks.delete(fileName);
+      return true;
+    }
+    return false;
   }
 }
 

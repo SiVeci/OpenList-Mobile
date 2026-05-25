@@ -263,6 +263,46 @@ class SAFModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun copyFileToSAF(sourcePath: String, treeUriStr: String, fileName: String, mimeType: String, promise: Promise) {
+        Thread {
+            try {
+                val sourceFile = File(sourcePath)
+                if (!sourceFile.exists()) {
+                    promise.reject("FILE_NOT_FOUND", "Source file does not exist")
+                    return@Thread
+                }
+
+                val treeUri = Uri.parse(treeUriStr)
+                val contentResolver = reactApplicationContext.contentResolver
+                val docId = if (DocumentsContract.isDocumentUri(reactApplicationContext, treeUri)) {
+                    DocumentsContract.getDocumentId(treeUri)
+                } else {
+                    DocumentsContract.getTreeDocumentId(treeUri)
+                }
+                val parentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
+
+                val newDocUri = DocumentsContract.createDocument(contentResolver, parentUri, mimeType, fileName)
+                    ?: throw Exception("Failed to create document")
+
+                java.io.FileInputStream(sourceFile).use { inputStream ->
+                    contentResolver.openOutputStream(newDocUri)?.use { outputStream ->
+                        val buffer = ByteArray(8192)
+                        var read: Int
+                        while (inputStream.read(buffer).also { read = it } != -1) {
+                            outputStream.write(buffer, 0, read)
+                        }
+                        outputStream.flush()
+                    } ?: throw Exception("Failed to open output stream")
+                }
+                
+                promise.resolve(newDocUri.toString())
+            } catch (e: Exception) {
+                promise.reject("COPY_ERROR", e.message, e)
+            }
+        }.start()
+    }
+
+    @ReactMethod
     fun deleteFile(uriStr: String, promise: Promise) {
         try {
             val uri = Uri.parse(uriStr)
