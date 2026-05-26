@@ -22,6 +22,7 @@ class AuthRepositoryImpl @Inject constructor(
     override suspend fun initActiveProfile() = withContext(Dispatchers.IO) {
         val active = dao.getActiveProfile()
         if (active != null) {
+            tokenManager.currentProfileId = active.id
             tokenManager.currentServerUrl = active.serverUrl
             tokenManager.currentToken = keystoreManager.decrypt(active.encryptedToken)
         }
@@ -33,6 +34,7 @@ class AuthRepositoryImpl @Inject constructor(
         dao.setActiveProfile(profileId)
         val active = dao.getActiveProfile()
         if (active != null) {
+            tokenManager.currentProfileId = active.id
             tokenManager.currentServerUrl = active.serverUrl
             tokenManager.currentToken = keystoreManager.decrypt(active.encryptedToken)
             Result.success(Unit)
@@ -62,8 +64,9 @@ class AuthRepositoryImpl @Inject constructor(
                     encryptedToken = encryptedToken,
                     isActive = true
                 )
-                dao.insert(profile)
+                val profileId = dao.insert(profile)
                 
+                tokenManager.currentProfileId = profileId
                 tokenManager.currentToken = token
                 tokenManager.currentServerUrl = baseUrl
                 

@@ -21,11 +21,16 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             "alist_database"
-        ).build()
+        ).fallbackToDestructiveMigration().build()
     }
 
     @Provides
     fun provideServerProfileDao(database: AppDatabase): ServerProfileDao {
         return database.serverProfileDao()
+    }
+
+    @Provides
+    fun provideDirectoryCacheDao(database: AppDatabase): DirectoryCacheDao {
+        return database.directoryCacheDao()
     }
 }

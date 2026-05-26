@@ -2,13 +2,15 @@ package com.example.alist.ui.home
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-    import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.InsertDriveFile
@@ -23,7 +25,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import java.text.SimpleDateFormat
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,7 +32,6 @@ import java.util.Locale
 fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // Handle physical back button
     BackHandler(enabled = uiState.currentPath != "/") {
         viewModel.navigateBack()
     }
@@ -151,64 +151,130 @@ fun FileBrowserView(viewModel: HomeViewModel, uiState: HomeUiState) {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().nestedScroll(pullToRefreshState.nestedScrollConnection)) {
-        if (uiState.isLoading) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-        } else if (uiState.error != null) {
-            Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(uiState.error!!, color = MaterialTheme.colorScheme.error)
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = { viewModel.refresh() }) { Text("Retry") }
+    Column(modifier = Modifier.fillMaxSize()) {
+        // --- Filter and Sort UI ---
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterCategory.values().forEach { cat ->
+                    FilterChip(
+                        selected = uiState.filterCategory == cat,
+                        onClick = { viewModel.updateFilterCategory(cat) },
+                        label = { Text(cat.label) }
+                    )
+                }
             }
-        } else if (uiState.files.isEmpty()) {
-            Text("Empty Directory", modifier = Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(uiState.files.size) { index ->
-                    val file = uiState.files[index]
-                    
-                    val icon = if (file.is_dir) Icons.Rounded.Folder
-                    else when (file.name.substringAfterLast('.').lowercase()) {
-                        "mp4", "mkv", "avi", "mov" -> Icons.Rounded.Movie
-                        "jpg", "jpeg", "png", "gif", "webp" -> Icons.Rounded.Image
-                        else -> Icons.Rounded.InsertDriveFile
-                    }
-
-                    val timeString = try {
-                        file.modified.substringBefore("T") + " " + file.modified.substringAfter("T").substringBeforeLast(":")
-                    } catch (e: Exception) {
-                        file.modified
-                    }
-                    
-                    val sizeString = if (file.is_dir) "" else formatFileSize(file.size)
-                    
-                    ListItem(
-                        headlineContent = { Text(file.name) },
-                        supportingContent = { Text("$timeString  $sizeString".trim()) },
-                        leadingContent = { Icon(icon, contentDescription = null, tint = if (file.is_dir) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) },
-                        modifier = Modifier.clickable {
-                            if (file.is_dir) {
-                                viewModel.navigateToFolder(file.name)
-                            }
+            Box {
+                var expanded by remember { mutableStateOf(false) }
+                IconButton(onClick = { expanded = true }) {
+                    Icon(Icons.Default.Sort, contentDescription = "Sort")
+                }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    DropdownMenuItem(text = { Text("按名称 ${if(uiState.sortBy == SortBy.Name) "✓" else ""}") }, onClick = { viewModel.updateSortBy(SortBy.Name); expanded = false })
+                    DropdownMenuItem(text = { Text("按大小 ${if(uiState.sortBy == SortBy.Size) "✓" else ""}") }, onClick = { viewModel.updateSortBy(SortBy.Size); expanded = false })
+                    DropdownMenuItem(text = { Text("按时间 ${if(uiState.sortBy == SortBy.Time) "✓" else ""}") }, onClick = { viewModel.updateSortBy(SortBy.Time); expanded = false })
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text(if (uiState.sortOrder == SortOrder.Asc) "正序 (点击切换)" else "倒序 (点击切换)") },
+                        onClick = {
+                            viewModel.updateSortOrder(if (uiState.sortOrder == SortOrder.Asc) SortOrder.Desc else SortOrder.Asc)
+                            expanded = false
                         }
                     )
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text("文件夹置顶") },
+                        trailingIcon = { Switch(checked = uiState.foldersOnTop, onCheckedChange = null) },
+                        onClick = { viewModel.updateFoldersOnTop(!uiState.foldersOnTop); expanded = false }
+                    )
+                }
+            }
+        }
+        OutlinedTextField(
+            value = uiState.filterSuffix,
+            onValueChange = { viewModel.updateFilterSuffix(it) },
+            placeholder = { Text("精确后缀过滤 (如 .mp4)") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .height(56.dp),
+            singleLine = true
+        )
+        Spacer(modifier = Modifier.height(8.dp))
 
-                    if (index == uiState.files.size - 1 && uiState.hasMore) {
-                        LaunchedEffect(Unit) {
-                            viewModel.loadMore()
+        // --- List UI ---
+        Box(modifier = Modifier
+            .weight(1f)
+            .nestedScroll(pullToRefreshState.nestedScrollConnection)) {
+            if (uiState.isLoading && uiState.files.isEmpty()) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else if (uiState.error != null && uiState.files.isEmpty()) {
+                Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(uiState.error!!, color = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = { viewModel.refresh() }) { Text("Retry") }
+                }
+            } else if (uiState.files.isEmpty()) {
+                Text("Empty Directory", modifier = Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(uiState.files.size) { index ->
+                        val file = uiState.files[index]
+                        
+                        val icon = if (file.is_dir) Icons.Rounded.Folder
+                        else when (file.name.substringAfterLast('.').lowercase()) {
+                            "mp4", "mkv", "avi", "mov", "flv", "webm" -> Icons.Rounded.Movie
+                            "jpg", "jpeg", "png", "gif", "webp", "bmp" -> Icons.Rounded.Image
+                            else -> Icons.Rounded.InsertDriveFile
                         }
-                        Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
+
+                        val timeString = try {
+                            file.modified.substringBefore("T") + " " + file.modified.substringAfter("T").substringBeforeLast(":")
+                        } catch (e: Exception) {
+                            file.modified
+                        }
+                        
+                        val sizeString = if (file.is_dir) "" else formatFileSize(file.size)
+                        
+                        ListItem(
+                            headlineContent = { Text(file.name) },
+                            supportingContent = { Text("$timeString  $sizeString".trim()) },
+                            leadingContent = { Icon(icon, contentDescription = null, tint = if (file.is_dir) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) },
+                            modifier = Modifier.clickable {
+                                if (file.is_dir) {
+                                    viewModel.navigateToFolder(file.name)
+                                }
+                            }
+                        )
+
+                        if (index == uiState.files.size - 1 && uiState.hasMore) {
+                            LaunchedEffect(Unit) {
+                                viewModel.loadMore()
+                            }
+                            Box(modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator()
+                            }
                         }
                     }
                 }
             }
-        }
 
-        PullToRefreshContainer(
-            state = pullToRefreshState,
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
+            PullToRefreshContainer(
+                state = pullToRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+        }
     }
 }
 
