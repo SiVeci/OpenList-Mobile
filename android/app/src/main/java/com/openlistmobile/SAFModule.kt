@@ -414,7 +414,7 @@ class SAFModule(reactContext: ReactApplicationContext) :
                     connection.disconnect()
                     try { DocumentsContract.deleteDocument(contentResolver, newDocUri) } catch (e: Exception) {}
                     
-                    val errorMsg = "DIAGNOSTIC INFO:\nReqURL: $currentUrl\nRespCode: ${connection.responseCode}\nType: $contentType\nLen: $contentLength\nExpectedLen: $fileSize\nSnippet: $snippet..."
+                    val errorMsg = "DIAGNOSTIC INFO:\nReqURL: $currentUrl\nRespCode: ${connection.responseCode}\nType: $contentType\nLen: $contentLength\nSnippet: $snippet..."
                     throw Exception(errorMsg)
                 }
 
