@@ -108,7 +108,7 @@ class FileRepositoryImpl @Inject constructor(
             val url = "$baseUrl/api/fs/put"
             
             val requestBody = object : okhttp3.RequestBody() {
-                override fun contentType(): okhttp3.MediaType? = okhttp3.MediaType.parse("application/octet-stream")
+                override fun contentType(): okhttp3.MediaType? = okhttp3.MediaType.Companion.parse("application/octet-stream")
                 override fun contentLength(): Long = contentLength
                 override fun writeTo(sink: okio.BufferedSink) {
                     val buffer = ByteArray(8192)
