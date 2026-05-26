@@ -448,12 +448,7 @@ class SAFModule(reactContext: ReactApplicationContext) :
 
     
     private fun getSafeUrl(urlStr: String): String {
-        return try {
-            val urlObj = java.net.URL(urlStr)
-            java.net.URI(urlObj.protocol, urlObj.userInfo, urlObj.host, urlObj.port, urlObj.path, urlObj.query, urlObj.ref).toASCIIString()
-        } catch (e: Exception) {
-            urlStr.replace(" ", "%20")
-        }
+        return urlStr.replace(" ", "%20")
     }
 
     private fun trustAllCertificates() {
