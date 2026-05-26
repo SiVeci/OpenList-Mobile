@@ -124,6 +124,8 @@ class DownloadService : Service() {
             var redirectCount = 0
             val maxRedirects = 5
 
+            val originalUriForPortRecovery = Uri.parse(url)
+
             while (redirectCount < maxRedirects) {
                 val conn = java.net.URL(currentUrl).openConnection() as java.net.HttpURLConnection
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
@@ -151,6 +153,14 @@ class DownloadService : Service() {
                     
                     if (!newUrl.startsWith("http")) {
                         newUrl = java.net.URL(java.net.URL(currentUrl), newUrl).toString()
+                    } else {
+                        // Recover lost port if redirecting to the same host but server stripped the port
+                        val redirectUri = Uri.parse(newUrl)
+                        if (redirectUri.host == originalUriForPortRecovery.host && originalUriForPortRecovery.port != -1) {
+                            if (redirectUri.port == -1 || redirectUri.port == 443 || redirectUri.port == 80) {
+                                newUrl = redirectUri.buildUpon().encodedAuthority("${redirectUri.host}:${originalUriForPortRecovery.port}").build().toString()
+                            }
+                        }
                     }
                     currentUrl = getSafeUrl(newUrl)
                     redirectCount++
