@@ -3,12 +3,13 @@ package com.example.alist.data.repository
 import com.example.alist.data.local.DirectoryCache
 import com.example.alist.data.local.DirectoryCacheDao
 import com.example.alist.data.remote.AListApiService
-import com.example.alist.data.remote.model.FileListData
-import com.example.alist.data.remote.model.FileListRequest
+import com.example.alist.data.remote.model.*
 import com.example.alist.domain.repository.FileRepository
 import com.example.alist.utils.TokenManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 class FileRepositoryImpl @Inject constructor(
@@ -24,7 +25,6 @@ class FileRepositoryImpl @Inject constructor(
             return@flow
         }
         
-        // Offline-First: Emit cache if it's the first page
         if (page == 1 && !refresh) {
             val cached = cacheDao.getCache(profileId, path)
             if (cached != null) {
@@ -40,7 +40,7 @@ class FileRepositoryImpl @Inject constructor(
         
         try {
             val baseUrl = tokenManager.currentServerUrl ?: return@flow
-            val url = "$baseUrl/api/fs/list"
+            val url = "/api/fs/list"
             
             val request = FileListRequest(path = path, page = page, per_page = perPage, refresh = refresh)
             val response = apiService.getFileList(url, request)
@@ -56,6 +56,36 @@ class FileRepositoryImpl @Inject constructor(
             }
         } catch (e: Exception) {
             emit(Result.failure(e))
+        }
+    }
+
+    override suspend fun mkdir(path: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val baseUrl = tokenManager.currentServerUrl ?: return@withContext Result.failure(Exception("No active server"))
+            val response = apiService.mkdir("/api/fs/mkdir", MkdirRequest(path))
+            if (response.code == 200) Result.success(Unit) else Result.failure(Exception(response.message))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun rename(newName: String, path: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val baseUrl = tokenManager.currentServerUrl ?: return@withContext Result.failure(Exception("No active server"))
+            val response = apiService.rename("/api/fs/rename", RenameRequest(newName, path))
+            if (response.code == 200) Result.success(Unit) else Result.failure(Exception(response.message))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun remove(dir: String, names: List<String>): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val baseUrl = tokenManager.currentServerUrl ?: return@withContext Result.failure(Exception("No active server"))
+            val response = apiService.remove("/api/fs/remove", RemoveRequest(dir, names))
+            if (response.code == 200) Result.success(Unit) else Result.failure(Exception(response.message))
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }

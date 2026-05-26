@@ -1,6 +1,9 @@
 package com.example.alist.ui.home
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -8,8 +11,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Image
@@ -21,19 +27,37 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
+import com.example.alist.data.remote.model.AListFile
+import java.net.URLEncoder
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
-    BackHandler(enabled = uiState.currentPath != "/") {
-        viewModel.navigateBack()
+    // Dialog & Overlay States
+    var showMkdirDialog by remember { mutableStateOf(false) }
+    var renameTarget by remember { mutableStateOf<AListFile?>(null) }
+    var deleteTarget by remember { mutableStateOf<AListFile?>(null) }
+    var previewImageUrl by remember { mutableStateOf<String?>(null) }
+
+    BackHandler(enabled = uiState.currentPath != "/" || previewImageUrl != null) {
+        if (previewImageUrl != null) {
+            previewImageUrl = null
+        } else {
+            viewModel.navigateBack()
+        }
     }
 
     Scaffold(
@@ -86,6 +110,13 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            if (uiState.profiles.isNotEmpty() && uiState.currentProfile != null) {
+                FloatingActionButton(onClick = { showMkdirDialog = true }) {
+                    Icon(Icons.Default.Add, contentDescription = "New Folder")
+                }
+            }
         }
     ) { innerPadding ->
         Box(
@@ -96,7 +127,107 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
             if (uiState.profiles.isEmpty()) {
                 LoginView(viewModel, uiState)
             } else {
-                FileBrowserView(viewModel, uiState)
+                FileBrowserView(
+                    viewModel = viewModel,
+                    uiState = uiState,
+                    onRenameRequest = { renameTarget = it },
+                    onDeleteRequest = { deleteTarget = it },
+                    onImagePreview = { previewImageUrl = it }
+                )
+            }
+        }
+    }
+
+    // --- Dialogs ---
+    if (showMkdirDialog) {
+        var folderName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showMkdirDialog = false },
+            title = { Text("新建文件夹") },
+            text = {
+                OutlinedTextField(
+                    value = folderName,
+                    onValueChange = { folderName = it },
+                    label = { Text("文件夹名称") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (folderName.isNotBlank()) {
+                        viewModel.createFolder(folderName.trim())
+                    }
+                    showMkdirDialog = false
+                }) { Text("创建") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMkdirDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    renameTarget?.let { file ->
+        var newName by remember { mutableStateOf(file.name) }
+        AlertDialog(
+            onDismissRequest = { renameTarget = null },
+            title = { Text("重命名") },
+            text = {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    label = { Text("新名称") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (newName.isNotBlank() && newName != file.name) {
+                        viewModel.renameFile(file, newName.trim())
+                    }
+                    renameTarget = null
+                }) { Text("重命名") }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTarget = null }) { Text("取消") }
+            }
+        )
+    }
+
+    deleteTarget?.let { file ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("删除确认") },
+            text = { Text("确定要删除 '${file.name}' 吗？此操作不可恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.removeFile(file)
+                    deleteTarget = null
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) { Text("取消") }
+            }
+        )
+    }
+
+    // --- Image Preview Overlay ---
+    previewImageUrl?.let { url ->
+        Dialog(
+            onDismissRequest = { previewImageUrl = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+                AsyncImage(
+                    model = url,
+                    contentDescription = "Image Preview",
+                    modifier = Modifier.fillMaxSize()
+                )
+                IconButton(
+                    onClick = { previewImageUrl = null },
+                    modifier = Modifier.align(Alignment.TopStart).padding(16.dp)
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                }
             }
         }
     }
@@ -136,7 +267,14 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FileBrowserView(viewModel: HomeViewModel, uiState: HomeUiState) {
+fun FileBrowserView(
+    viewModel: HomeViewModel,
+    uiState: HomeUiState,
+    onRenameRequest: (AListFile) -> Unit,
+    onDeleteRequest: (AListFile) -> Unit,
+    onImagePreview: (String) -> Unit
+) {
+    val context = LocalContext.current
     val pullToRefreshState = rememberPullToRefreshState()
 
     if (pullToRefreshState.isRefreshing) {
@@ -152,7 +290,6 @@ fun FileBrowserView(viewModel: HomeViewModel, uiState: HomeUiState) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // --- Filter and Sort UI ---
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -211,7 +348,6 @@ fun FileBrowserView(viewModel: HomeViewModel, uiState: HomeUiState) {
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        // --- List UI ---
         Box(modifier = Modifier
             .weight(1f)
             .nestedScroll(pullToRefreshState.nestedScrollConnection)) {
@@ -230,10 +366,15 @@ fun FileBrowserView(viewModel: HomeViewModel, uiState: HomeUiState) {
                     items(uiState.files.size) { index ->
                         val file = uiState.files[index]
                         
+                        val ext = file.name.substringAfterLast('.').lowercase()
+                        val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "flv", "webm")
+                        val isImage = ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
+                        val isDoc = ext in listOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx")
+
                         val icon = if (file.is_dir) Icons.Rounded.Folder
-                        else when (file.name.substringAfterLast('.').lowercase()) {
-                            "mp4", "mkv", "avi", "mov", "flv", "webm" -> Icons.Rounded.Movie
-                            "jpg", "jpeg", "png", "gif", "webp", "bmp" -> Icons.Rounded.Image
+                        else when {
+                            isVideo -> Icons.Rounded.Movie
+                            isImage -> Icons.Rounded.Image
                             else -> Icons.Rounded.InsertDriveFile
                         }
 
@@ -249,9 +390,52 @@ fun FileBrowserView(viewModel: HomeViewModel, uiState: HomeUiState) {
                             headlineContent = { Text(file.name) },
                             supportingContent = { Text("$timeString  $sizeString".trim()) },
                             leadingContent = { Icon(icon, contentDescription = null, tint = if (file.is_dir) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) },
+                            trailingContent = {
+                                Box {
+                                    var moreMenuExpanded by remember { mutableStateOf(false) }
+                                    IconButton(onClick = { moreMenuExpanded = true }) {
+                                        Icon(Icons.Default.MoreVert, contentDescription = "More Options")
+                                    }
+                                    DropdownMenu(expanded = moreMenuExpanded, onDismissRequest = { moreMenuExpanded = false }) {
+                                        DropdownMenuItem(
+                                            text = { Text("重命名") },
+                                            onClick = {
+                                                moreMenuExpanded = false
+                                                onRenameRequest(file)
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("删除", color = MaterialTheme.colorScheme.error) },
+                                            onClick = {
+                                                moreMenuExpanded = false
+                                                onDeleteRequest(file)
+                                            }
+                                        )
+                                    }
+                                }
+                            },
                             modifier = Modifier.clickable {
                                 if (file.is_dir) {
                                     viewModel.navigateToFolder(file.name)
+                                } else {
+                                    val directLink = viewModel.generateDirectLink(file) ?: return@clickable
+                                    when {
+                                        isImage -> {
+                                            onImagePreview(directLink)
+                                        }
+                                        isVideo -> {
+                                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                                setDataAndType(Uri.parse(directLink), "video/*")
+                                            }
+                                            context.startActivity(Intent.createChooser(intent, "选择播放器"))
+                                        }
+                                        isDoc -> {
+                                            val encodedUrl = URLEncoder.encode(directLink, "UTF-8")
+                                            val previewUrl = "https://view.officeapps.live.com/op/view.aspx?src=$encodedUrl"
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(previewUrl))
+                                            context.startActivity(intent)
+                                        }
+                                    }
                                 }
                             }
                         )
@@ -266,6 +450,10 @@ fun FileBrowserView(viewModel: HomeViewModel, uiState: HomeUiState) {
                                 CircularProgressIndicator()
                             }
                         }
+                    }
+                    item {
+                        // Pad bottom for FAB
+                        Spacer(modifier = Modifier.height(80.dp))
                     }
                 }
             }

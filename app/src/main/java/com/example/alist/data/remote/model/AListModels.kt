@@ -40,3 +40,17 @@ data class AListFile(
     val thumb: String,
     val type: Int
 )
+
+data class MkdirRequest(
+    val path: String
+)
+
+data class RenameRequest(
+    val name: String,
+    val path: String
+)
+
+data class RemoveRequest(
+    val dir: String,
+    val names: List<String>
+)

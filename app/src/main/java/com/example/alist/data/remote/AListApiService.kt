@@ -1,10 +1,6 @@
 package com.example.alist.data.remote
 
-import com.example.alist.data.remote.model.AListResponse
-import com.example.alist.data.remote.model.FileListData
-import com.example.alist.data.remote.model.FileListRequest
-import com.example.alist.data.remote.model.LoginData
-import com.example.alist.data.remote.model.LoginRequest
+import com.example.alist.data.remote.model.*
 import retrofit2.http.Body
 import retrofit2.http.POST
 import retrofit2.http.Url
@@ -21,4 +17,22 @@ interface AListApiService {
         @Url url: String,
         @Body request: FileListRequest
     ): AListResponse<FileListData>
+
+    @POST
+    suspend fun mkdir(
+        @Url url: String,
+        @Body request: MkdirRequest
+    ): AListResponse<Any>
+
+    @POST
+    suspend fun rename(
+        @Url url: String,
+        @Body request: RenameRequest
+    ): AListResponse<Any>
+
+    @POST
+    suspend fun remove(
+        @Url url: String,
+        @Body request: RemoveRequest
+    ): AListResponse<Any>
 }

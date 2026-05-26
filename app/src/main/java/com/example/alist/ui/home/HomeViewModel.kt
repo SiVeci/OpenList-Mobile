@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.net.URLEncoder
 import javax.inject.Inject
 
 enum class FilterCategory(val label: String) {
@@ -98,7 +99,7 @@ class HomeViewModel @Inject constructor(
                 error = null,
                 currentPath = path,
                 page = 1,
-                rawFiles = emptyList() // clear raw files to avoid ghost rendering when navigating
+                rawFiles = emptyList()
             ) }
             
             fileRepository.getFileListFlow(path, page = 1, perPage = 30, refresh = isRefresh).collect { result ->
@@ -134,7 +135,6 @@ class HomeViewModel @Inject constructor(
             val nextPage = state.page + 1
             _uiState.update { it.copy(isLoadingMore = true, page = nextPage) }
             
-            // Collect page > 1 (only network emit)
             fileRepository.getFileListFlow(state.currentPath, page = nextPage, perPage = 30, refresh = false).collect { result ->
                 result.onSuccess { data ->
                     val moreFiles = data.content ?: emptyList()
@@ -152,7 +152,7 @@ class HomeViewModel @Inject constructor(
                         s.copy(
                             isLoadingMore = false,
                             error = error.message,
-                            page = state.page // revert page on error
+                            page = state.page
                         )
                     }
                 }
@@ -174,6 +174,46 @@ class HomeViewModel @Inject constructor(
             return true
         }
         return false
+    }
+
+    // --- Phase 5: CRUD Operations ---
+
+    fun createFolder(folderName: String) {
+        viewModelScope.launch {
+            val current = _uiState.value.currentPath
+            val targetPath = if (current == "/") "/$folderName" else "$current/$folderName"
+            fileRepository.mkdir(targetPath).onSuccess { refresh() }
+        }
+    }
+
+    fun renameFile(file: AListFile, newName: String) {
+        viewModelScope.launch {
+            val current = _uiState.value.currentPath
+            val targetPath = if (current == "/") "/${file.name}" else "$current/${file.name}"
+            fileRepository.rename(newName, targetPath).onSuccess { refresh() }
+        }
+    }
+
+    fun removeFile(file: AListFile) {
+        viewModelScope.launch {
+            fileRepository.remove(_uiState.value.currentPath, listOf(file.name)).onSuccess { refresh() }
+        }
+    }
+
+    // --- Phase 5: Media Preview / Direct Link Generation ---
+    fun generateDirectLink(file: AListFile): String? {
+        val baseUrl = _uiState.value.currentProfile?.serverUrl ?: return null
+        val current = _uiState.value.currentPath
+        val fullPath = if (current == "/") "/${file.name}" else "$current/${file.name}"
+        
+        // Encode each segment of the path, keep '/' intact
+        val encodedSegments = fullPath.split("/").map {
+            if (it.isEmpty()) "" else URLEncoder.encode(it, "UTF-8").replace("+", "%20")
+        }
+        val encodedPath = encodedSegments.joinToString("/")
+        
+        val signQuery = if (file.sign.isNotBlank()) "?sign=${file.sign}" else ""
+        return "$baseUrl/d$encodedPath$signQuery"
     }
 
     // -- Filter and Sort Updates --
@@ -207,10 +247,9 @@ class HomeViewModel @Inject constructor(
         val state = _uiState.value
         var filtered = state.rawFiles
 
-        // 1. Filter Category
         if (state.filterCategory != FilterCategory.All) {
             filtered = filtered.filter { file ->
-                if (file.is_dir) return@filter false // Usually we don't apply these filters to folders, or we can hide folders. Let's hide folders if filtering.
+                if (file.is_dir) return@filter false
                 val ext = file.name.substringAfterLast('.', "").lowercase()
                 when (state.filterCategory) {
                     FilterCategory.Video -> ext in listOf("mp4", "mkv", "avi", "mov", "flv", "webm")
@@ -223,7 +262,6 @@ class HomeViewModel @Inject constructor(
             }
         }
 
-        // 2. Filter Suffix
         if (state.filterSuffix.isNotBlank()) {
             val s = state.filterSuffix.trim().removePrefix(".").lowercase()
             filtered = filtered.filter { 
@@ -231,7 +269,6 @@ class HomeViewModel @Inject constructor(
             }
         }
 
-        // 3. Sort
         val comparator = Comparator<AListFile> { a, b ->
             val res = when (state.sortBy) {
                 SortBy.Name -> a.name.compareTo(b.name, ignoreCase = true)
@@ -241,9 +278,7 @@ class HomeViewModel @Inject constructor(
             if (state.sortOrder == SortOrder.Desc) -res else res
         }
 
-        // 4. Folders on Top
         val sorted = if (state.foldersOnTop && state.filterCategory == FilterCategory.All && state.filterSuffix.isBlank()) {
-            // Folders on top mostly makes sense when not filtering
             val folders = filtered.filter { it.is_dir }.sortedWith(comparator)
             val files = filtered.filter { !it.is_dir }.sortedWith(comparator)
             folders + files
@@ -254,7 +289,6 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(files = sorted) }
     }
 
-    // For fallback login when no profiles exist
     fun testLoginAndFetch(serverUrl: String, user: String, pass: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
