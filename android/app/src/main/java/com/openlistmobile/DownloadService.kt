@@ -147,22 +147,31 @@ class DownloadService : Service() {
                     status == java.net.HttpURLConnection.HTTP_SEE_OTHER ||
                     status == 307 || status == 308) {
                     
-                    var newUrl = conn.getHeaderField("Location")
+                    var newUrlStr = conn.getHeaderField("Location")
                     conn.disconnect()
-                    if (newUrl == null) throw Exception("Redirect without Location header")
+                    if (newUrlStr == null) throw Exception("Redirect without Location header")
                     
-                    if (!newUrl.startsWith("http")) {
-                        newUrl = java.net.URL(java.net.URL(currentUrl), newUrl).toString()
-                    } else {
-                        // Recover lost port if redirecting to the same host but server stripped the port
-                        val redirectUri = Uri.parse(newUrl)
-                        if (redirectUri.host == originalUriForPortRecovery.host && originalUriForPortRecovery.port != -1) {
-                            if (redirectUri.port == -1 || redirectUri.port == 443 || redirectUri.port == 80) {
-                                newUrl = redirectUri.buildUpon().encodedAuthority("${redirectUri.host}:${originalUriForPortRecovery.port}").build().toString()
-                            }
-                        }
+                    val originalScheme = originalUriForPortRecovery.scheme
+                    val originalPort = originalUriForPortRecovery.port
+
+                    if (!newUrlStr.startsWith("http")) {
+                        newUrlStr = java.net.URL(java.net.URL(currentUrl), newUrlStr).toString()
                     }
-                    currentUrl = getSafeUrl(newUrl)
+                    
+                    val redirectUri = Uri.parse(newUrlStr)
+                    
+                    if (redirectUri.host == originalHost) {
+                        val builder = redirectUri.buildUpon()
+                        if (originalScheme != null) {
+                            builder.scheme(originalScheme)
+                        }
+                        if (originalPort != -1) {
+                            builder.encodedAuthority("$originalHost:$originalPort")
+                        }
+                        newUrlStr = builder.build().toString()
+                    }
+
+                    currentUrl = getSafeUrl(newUrlStr)
                     redirectCount++
                     continue
                 }
