@@ -6,6 +6,12 @@ import com.example.alist.data.local.AppDatabase
 import com.example.alist.data.local.DirectoryCacheDao
 import com.example.alist.data.local.ServerProfileDao
 import com.example.alist.data.local.TransferTaskDao
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
+import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
