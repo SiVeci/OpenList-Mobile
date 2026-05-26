@@ -3,6 +3,7 @@ package com.example.alist.di
 import android.content.Context
 import androidx.room.Room
 import com.example.alist.data.local.AppDatabase
+import com.example.alist.data.local.DirectoryCacheDao
 import com.example.alist.data.local.ServerProfileDao
 import dagger.Module
 import dagger.Provides
