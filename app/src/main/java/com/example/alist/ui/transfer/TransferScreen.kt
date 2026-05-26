@@ -1,5 +1,6 @@
 package com.example.alist.ui.transfer
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -54,15 +55,7 @@ fun TransferScreen(
             TabRow(
                 selectedTabIndex = selectedTabIndex,
                 containerColor = MaterialTheme.colorScheme.background,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                indicator = { tabPositions ->
-                    if (selectedTabIndex < tabPositions.size) {
-                        TabRowDefaults.SecondaryIndicator(
-                            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
+                contentColor = MaterialTheme.colorScheme.primary
             ) {
                 Tab(
                     selected = selectedTabIndex == 0,
@@ -266,10 +259,10 @@ fun TransferTaskCard(
                 }
             }
 
-            if (task.status == TransferStatus.ERROR && task.errorMsg.isNotBlank()) {
+            if (task.status == TransferStatus.ERROR && !task.errorMsg.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = task.errorMsg,
+                    text = task.errorMsg ?: "",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
