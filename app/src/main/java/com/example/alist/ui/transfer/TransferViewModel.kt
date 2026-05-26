@@ -28,7 +28,11 @@ class TransferViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val finishedTasks: StateFlow<List<TransferTask>> = transferRepository.getAllTasks()
-        .map { list -> list.filter { it.status == TransferStatus.SUCCESS || it.status == TransferStatus.ERROR } }
+        .map { list -> list.filter { it.status == TransferStatus.SUCCESS } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val failedTasks: StateFlow<List<TransferTask>> = transferRepository.getAllTasks()
+        .map { list -> list.filter { it.status == TransferStatus.ERROR } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun pauseTask(task: TransferTask) {

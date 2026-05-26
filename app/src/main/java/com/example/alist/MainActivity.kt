@@ -1,5 +1,7 @@
 package com.example.alist
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -17,8 +19,14 @@ import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    private var sharedUrisFromIntent: List<Uri> = emptyList()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        handleShareIntent(intent)
+
         setContent {
             OpenListTheme {
                 Surface(
@@ -36,6 +44,27 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        intent?.let { handleShareIntent(it) }
+    }
+
+    private fun handleShareIntent(intent: Intent) {
+        val uris = mutableListOf<Uri>()
+        when (intent.action) {
+            Intent.ACTION_SEND -> {
+                intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris.add(it) }
+            }
+            Intent.ACTION_SEND_MULTIPLE -> {
+                intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris.addAll(it) }
+            }
+        }
+        if (uris.isNotEmpty()) {
+            sharedUrisFromIntent = uris
+            // TODO: 调用 ViewModel (通过 LocalBroadcast 或注入 State) 弹出目录选择界面
         }
     }
 }

@@ -24,6 +24,7 @@ fun TransferScreen(
     var selectedTabIndex by remember { mutableStateOf(0) }
     val activeTasks by viewModel.activeTasks.collectAsState()
     val finishedTasks by viewModel.finishedTasks.collectAsState()
+    val failedTasks by viewModel.failedTasks.collectAsState()
 
     Scaffold(
         topBar = {
@@ -42,17 +43,26 @@ fun TransferScreen(
                 Tab(
                     selected = selectedTabIndex == 0,
                     onClick = { selectedTabIndex = 0 },
-                    text = { Text("正在传输 (${activeTasks.size})") }
+                    text = { Text("传输中 (${activeTasks.size})") }
                 )
                 Tab(
                     selected = selectedTabIndex == 1,
                     onClick = { selectedTabIndex = 1 },
                     text = { Text("已完成 (${finishedTasks.size})") }
                 )
+                Tab(
+                    selected = selectedTabIndex == 2,
+                    onClick = { selectedTabIndex = 2 },
+                    text = { Text("失败 (${failedTasks.size})") }
+                )
             }
 
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                val list = if (selectedTabIndex == 0) activeTasks else finishedTasks
+                val list = when (selectedTabIndex) {
+                    0 -> activeTasks
+                    1 -> finishedTasks
+                    else -> failedTasks
+                }
                 items(list, key = { it.id }) { task ->
                     TransferTaskItem(
                         task = task,
@@ -76,24 +86,33 @@ fun TransferTaskItem(
     onCancel: (TransferTask) -> Unit,
     onDelete: (TransferTask) -> Unit
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(task.fileName, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
             
-            when (task.status) {
-                TransferStatus.DOWNLOADING -> {
-                    IconButton(onClick = { onPause(task) }) { Icon(Icons.Default.Pause, contentDescription = "Pause") }
-                    IconButton(onClick = { onCancel(task) }) { Icon(Icons.Default.Close, contentDescription = "Cancel") }
+            Box {
+                IconButton(onClick = { menuExpanded = true }) { 
+                    Icon(Icons.Default.MoreVert, contentDescription = "More Options") 
                 }
-                TransferStatus.PAUSED -> {
-                    IconButton(onClick = { onResume(task) }) { Icon(Icons.Default.PlayArrow, contentDescription = "Resume") }
-                    IconButton(onClick = { onCancel(task) }) { Icon(Icons.Default.Close, contentDescription = "Cancel") }
-                }
-                TransferStatus.PENDING -> {
-                    Text("等待中", style = MaterialTheme.typography.bodySmall)
-                }
-                else -> {
-                    IconButton(onClick = { onDelete(task) }) { Icon(Icons.Default.Delete, contentDescription = "Delete Record") }
+                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    when (task.status) {
+                        TransferStatus.DOWNLOADING -> {
+                            DropdownMenuItem(text = { Text("暂停 (Pause)") }, onClick = { onPause(task); menuExpanded = false })
+                            DropdownMenuItem(text = { Text("取消 (Cancel)") }, onClick = { onCancel(task); menuExpanded = false })
+                        }
+                        TransferStatus.PAUSED -> {
+                            DropdownMenuItem(text = { Text("恢复 (Resume)") }, onClick = { onResume(task); menuExpanded = false })
+                            DropdownMenuItem(text = { Text("取消 (Cancel)") }, onClick = { onCancel(task); menuExpanded = false })
+                        }
+                        TransferStatus.PENDING -> {
+                            DropdownMenuItem(text = { Text("取消 (Cancel)") }, onClick = { onCancel(task); menuExpanded = false })
+                        }
+                        else -> {
+                            DropdownMenuItem(text = { Text("删除记录 (Delete)") }, onClick = { onDelete(task); menuExpanded = false })
+                        }
+                    }
                 }
             }
         }
@@ -110,6 +129,8 @@ fun TransferTaskItem(
                 Text("${formatBytes(task.downloadedBytes)} / ${formatBytes(task.totalBytes)}", style = MaterialTheme.typography.bodySmall)
                 Text("${(progress * 100).toInt()} %", style = MaterialTheme.typography.bodySmall)
             }
+        } else if (task.status == TransferStatus.PENDING) {
+            Text("等待中...", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
