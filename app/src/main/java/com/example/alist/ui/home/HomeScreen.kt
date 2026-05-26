@@ -28,6 +28,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -513,6 +514,7 @@ fun FileBrowserView(
                 .weight(1f)
                 .fillMaxWidth()
                 .nestedScroll(pullToRefreshState.nestedScrollConnection)
+                .clipToBounds() // Hide resting pull-to-refresh shadow/edge
         ) {
             when {
                 uiState.isLoading && uiState.files.isEmpty() -> {
