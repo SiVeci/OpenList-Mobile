@@ -14,12 +14,13 @@ class FileRepositoryImpl @Inject constructor(
     private val tokenManager: TokenManager
 ) : FileRepository {
 
-    override suspend fun getFileList(path: String): Result<FileListData> = withContext(Dispatchers.IO) {
+    override suspend fun getFileList(path: String, page: Int, perPage: Int, refresh: Boolean): Result<FileListData> = withContext(Dispatchers.IO) {
         try {
             val baseUrl = tokenManager.currentServerUrl ?: return@withContext Result.failure(Exception("No active server"))
             val url = "$baseUrl/api/fs/list"
             
-            val response = apiService.getFileList(url, FileListRequest(path = path))
+            val request = FileListRequest(path = path, page = page, per_page = perPage, refresh = refresh)
+            val response = apiService.getFileList(url, request)
             if (response.code == 200 && response.data != null) {
                 Result.success(response.data)
             } else {
