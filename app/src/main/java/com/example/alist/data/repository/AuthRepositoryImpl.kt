@@ -20,8 +20,11 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun loginAndSave(serverUrl: String, username: String, password: String): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val baseUrl = serverUrl.trimEnd('/')
-            val url = "/api/auth/login"
+            var baseUrl = serverUrl.trim().trimEnd('/')
+            if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+                baseUrl = "http://$baseUrl"
+            }
+            val url = "$baseUrl/api/auth/login"
             
             val response = apiService.login(url, LoginRequest(username, password))
             if (response.code == 200 && response.data != null) {

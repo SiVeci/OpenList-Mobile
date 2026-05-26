@@ -17,7 +17,7 @@ class FileRepositoryImpl @Inject constructor(
     override suspend fun getFileList(path: String): Result<FileListData> = withContext(Dispatchers.IO) {
         try {
             val baseUrl = tokenManager.currentServerUrl ?: return@withContext Result.failure(Exception("No active server"))
-            val url = "/api/fs/list"
+            val url = "$baseUrl/api/fs/list"
             
             val response = apiService.getFileList(url, FileListRequest(path = path))
             if (response.code == 200 && response.data != null) {
