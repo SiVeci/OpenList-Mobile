@@ -127,6 +127,30 @@ fun HomeScreen(
                     Icon(Icons.Default.Add, contentDescription = "New Folder")
                 }
             }
+        },
+        bottomBar = {
+            val sharedUris by viewModel.shareManager.sharedUris.collectAsState()
+            if (sharedUris.isNotEmpty()) {
+                BottomAppBar {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("上传 ${sharedUris.size} 个文件到当前目录", style = MaterialTheme.typography.bodyMedium)
+                        Row {
+                            TextButton(onClick = { viewModel.shareManager.clearSharedUris() }) {
+                                Text("取消")
+                            }
+                            Button(onClick = { viewModel.uploadSharedFiles(context, sharedUris) }) {
+                                Text("上传")
+                            }
+                        }
+                    }
+                }
+            }
         }
     ) { innerPadding ->
         Box(
@@ -446,6 +470,22 @@ fun FileBrowserView(
                                     }
                                     DropdownMenu(expanded = moreMenuExpanded, onDismissRequest = { moreMenuExpanded = false }) {
                                         if (!file.is_dir) {
+                                            DropdownMenuItem(
+                                                text = { Text("分享直链") },
+                                                onClick = {
+                                                    moreMenuExpanded = false
+                                                    val url = viewModel.generateDirectLink(file)
+                                                    if (url != null) {
+                                                        val sendIntent = Intent().apply {
+                                                            action = Intent.ACTION_SEND
+                                                            putExtra(Intent.EXTRA_TEXT, url)
+                                                            type = "text/plain"
+                                                        }
+                                                        val shareIntent = Intent.createChooser(sendIntent, "分享直链")
+                                                        context.startActivity(shareIntent)
+                                                    }
+                                                }
+                                            )
                                             DropdownMenuItem(
                                                 text = { Text("下载文件") },
                                                 onClick = {

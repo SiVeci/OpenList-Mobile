@@ -97,4 +97,55 @@ class FileRepositoryImpl @Inject constructor(
             Result.failure(e)
         }
     }
+
+    override suspend fun uploadFile(path: String, fileName: String, inputStream: java.io.InputStream, contentLength: Long): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val baseUrl = tokenManager.currentServerUrl ?: return@withContext Result.failure(Exception("No active server"))
+            val token = tokenManager.currentToken ?: return@withContext Result.failure(Exception("No token"))
+            
+            val encodedPath = java.net.URLEncoder.encode("$path/$fileName", "UTF-8").replace("+", "%20")
+            
+            val url = "$baseUrl/api/fs/put"
+            
+            val requestBody = object : okhttp3.RequestBody() {
+                override fun contentType(): okhttp3.MediaType? = okhttp3.MediaType.parse("application/octet-stream")
+                override fun contentLength(): Long = contentLength
+                override fun writeTo(sink: okio.BufferedSink) {
+                    val buffer = ByteArray(8192)
+                    var read: Int
+                    while (inputStream.read(buffer).also { read = it } != -1) {
+                        sink.write(buffer, 0, read)
+                    }
+                }
+            }
+
+            val request = okhttp3.Request.Builder()
+                .url(url)
+                .addHeader("Authorization", token)
+                .addHeader("File-Path", encodedPath)
+                .put(requestBody)
+                .build()
+
+            // We need an OkHttpClient here. We can inject it. But for simplicity, we'll create a new one or use a shared one if injected.
+            // Wait, we can inject OkHttpClient in the constructor of FileRepositoryImpl
+            val client = okhttp3.OkHttpClient()
+            val response = client.newCall(request).execute()
+
+            if (response.isSuccessful) {
+                val bodyStr = response.body?.string()
+                // basic check for AList standard response
+                if (bodyStr != null && bodyStr.contains("\"code\":200")) {
+                     Result.success(Unit)
+                } else {
+                     Result.failure(Exception("Upload failed: $bodyStr"))
+                }
+            } else {
+                Result.failure(Exception("HTTP error ${response.code}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        } finally {
+            inputStream.close()
+        }
+    }
 }

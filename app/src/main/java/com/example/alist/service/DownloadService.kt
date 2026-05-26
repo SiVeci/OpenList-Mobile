@@ -97,13 +97,14 @@ class DownloadService : Service() {
         activeJob?.cancel()
         activeJob = serviceScope.launch {
             val task = transferTaskDao.getTaskById(taskId) ?: return@launch
-            transferTaskDao.update(task.copy(status = TransferStatus.DOWNLOADING))
+            val downloadingTask = task.copy(status = TransferStatus.DOWNLOADING)
+            transferTaskDao.update(downloadingTask)
 
             try {
-                val file = File(task.savePath)
+                val file = File(downloadingTask.savePath)
                 val downloaded = if (file.exists()) file.length() else 0L
 
-                val requestBuilder = Request.Builder().url(task.fileUrl)
+                val requestBuilder = Request.Builder().url(downloadingTask.fileUrl)
                 if (downloaded > 0) {
                     requestBuilder.addHeader("Range", "bytes=-")
                 }
@@ -119,7 +120,7 @@ class DownloadService : Service() {
                 val contentLength = body.contentLength()
                 val total = if (downloaded > 0) downloaded + contentLength else contentLength
 
-                var currentTask = task.copy(totalBytes = total, downloadedBytes = downloaded)
+                var currentTask = downloadingTask.copy(totalBytes = total, downloadedBytes = downloaded)
                 transferTaskDao.update(currentTask)
 
                 body.byteStream().use { input ->

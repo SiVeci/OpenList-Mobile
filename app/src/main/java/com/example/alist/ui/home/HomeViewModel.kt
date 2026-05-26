@@ -11,6 +11,7 @@ import com.example.alist.domain.repository.AuthRepository
 import com.example.alist.domain.repository.FileRepository
 import com.example.alist.domain.repository.TransferRepository
 import com.example.alist.service.DownloadService
+import com.example.alist.utils.ShareManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -63,7 +64,8 @@ data class HomeUiState(
 class HomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val fileRepository: FileRepository,
-    private val transferRepository: TransferRepository
+    private val transferRepository: TransferRepository,
+    val shareManager: ShareManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -227,6 +229,36 @@ class HomeViewModel @Inject constructor(
 
     fun clearTextPreview() {
         _uiState.update { it.copy(previewTextContent = null, previewTextFileName = null, isPreviewingTextLoading = false) }
+    }
+
+    // --- Phase 7: Upload ---
+    fun uploadSharedFiles(context: Context, uris: List<android.net.Uri>) {
+        val currentPath = _uiState.value.currentPath
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null) }
+            try {
+                for (uri in uris) {
+                    val contentResolver = context.contentResolver
+                    val cursor = contentResolver.query(uri, null, null, null, null)
+                    var fileName = "uploaded_file_${System.currentTimeMillis()}"
+                    var fileSize = -1L
+                    if (cursor != null && cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                        if (nameIndex != -1) fileName = cursor.getString(nameIndex)
+                        if (sizeIndex != -1) fileSize = cursor.getLong(sizeIndex)
+                        cursor.close()
+                    }
+
+                    val inputStream = contentResolver.openInputStream(uri) ?: continue
+                    fileRepository.uploadFile(currentPath, fileName, inputStream, fileSize)
+                }
+                shareManager.clearSharedUris()
+                refresh()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, error = e.message) }
+            }
+        }
     }
 
     fun generateDirectLink(file: AListFile): String? {

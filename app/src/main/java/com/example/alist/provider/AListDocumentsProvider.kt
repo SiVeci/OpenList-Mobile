@@ -7,6 +7,7 @@ import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.provider.DocumentsProvider
 import android.webkit.MimeTypeMap
+import com.example.alist.domain.repository.AuthRepository
 import com.example.alist.domain.repository.FileRepository
 import com.example.alist.utils.TokenManager
 import dagger.hilt.EntryPoint
@@ -29,6 +30,7 @@ class AListDocumentsProvider : DocumentsProvider() {
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface ProviderEntryPoint {
+        fun authRepository(): AuthRepository
         fun fileRepository(): FileRepository
         fun tokenManager(): TokenManager
         fun okHttpClient(): OkHttpClient
@@ -57,7 +59,17 @@ class AListDocumentsProvider : DocumentsProvider() {
 
     override fun onCreate(): Boolean = true
 
+    private fun ensureInitialized() {
+        val tokenManager = entryPoint.tokenManager()
+        if (tokenManager.currentProfileId == -1L) {
+            runBlocking {
+                entryPoint.authRepository().initActiveProfile()
+            }
+        }
+    }
+
     override fun queryRoots(projection: Array<out String>?): Cursor {
+        ensureInitialized()
         val matrixCursor = MatrixCursor(projection ?: defaultRootProjection)
         val tokenManager = entryPoint.tokenManager()
         
@@ -110,6 +122,7 @@ class AListDocumentsProvider : DocumentsProvider() {
         projection: Array<out String>?,
         sortOrder: String?
     ): Cursor {
+        ensureInitialized()
         val matrixCursor = MatrixCursor(projection ?: defaultDocumentProjection)
         
         // Android 系统要求 DocumentsProvider 同步返回，我们这里通过 runBlocking 阻塞后台线程以获取网络数据

@@ -15,12 +15,15 @@ import androidx.navigation.compose.rememberNavController
 import com.example.alist.ui.home.HomeScreen
 import com.example.alist.ui.theme.OpenListTheme
 import com.example.alist.ui.transfer.TransferScreen
+import com.example.alist.utils.ShareManager
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    private var sharedUrisFromIntent: List<Uri> = emptyList()
+    @Inject
+    lateinit var shareManager: ShareManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,8 +66,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         if (uris.isNotEmpty()) {
-            sharedUrisFromIntent = uris
-            // TODO: 调用 ViewModel (通过 LocalBroadcast 或注入 State) 弹出目录选择界面
+            shareManager.setSharedUris(uris)
         }
     }
 }
