@@ -40,7 +40,7 @@ class FileRepositoryImpl @Inject constructor(
         
         try {
             val baseUrl = tokenManager.currentServerUrl ?: return@flow
-            val url = "/api/fs/list"
+            val url = "$baseUrl/api/fs/list"
             
             val request = FileListRequest(path = path, page = page, per_page = perPage, refresh = refresh)
             val response = apiService.getFileList(url, request)
@@ -62,7 +62,7 @@ class FileRepositoryImpl @Inject constructor(
     override suspend fun mkdir(path: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val baseUrl = tokenManager.currentServerUrl ?: return@withContext Result.failure(Exception("No active server"))
-            val response = apiService.mkdir("/api/fs/mkdir", MkdirRequest(path))
+            val response = apiService.mkdir("$baseUrl/api/fs/mkdir", MkdirRequest(path))
             if (response.code == 200) Result.success(Unit) else Result.failure(Exception(response.message))
         } catch (e: Exception) {
             Result.failure(e)
@@ -72,7 +72,7 @@ class FileRepositoryImpl @Inject constructor(
     override suspend fun rename(newName: String, path: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val baseUrl = tokenManager.currentServerUrl ?: return@withContext Result.failure(Exception("No active server"))
-            val response = apiService.rename("/api/fs/rename", RenameRequest(newName, path))
+            val response = apiService.rename("$baseUrl/api/fs/rename", RenameRequest(newName, path))
             if (response.code == 200) Result.success(Unit) else Result.failure(Exception(response.message))
         } catch (e: Exception) {
             Result.failure(e)
@@ -82,7 +82,7 @@ class FileRepositoryImpl @Inject constructor(
     override suspend fun remove(dir: String, names: List<String>): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val baseUrl = tokenManager.currentServerUrl ?: return@withContext Result.failure(Exception("No active server"))
-            val response = apiService.remove("/api/fs/remove", RemoveRequest(dir, names))
+            val response = apiService.remove("$baseUrl/api/fs/remove", RemoveRequest(dir, names))
             if (response.code == 200) Result.success(Unit) else Result.failure(Exception(response.message))
         } catch (e: Exception) {
             Result.failure(e)
