@@ -1,0 +1,9 @@
+package com.example.alist.data.local
+
+import androidx.room.Database
+import androidx.room.RoomDatabase
+
+@Database(entities = [ServerProfile::class], version = 1, exportSchema = false)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun serverProfileDao(): ServerProfileDao
+}
