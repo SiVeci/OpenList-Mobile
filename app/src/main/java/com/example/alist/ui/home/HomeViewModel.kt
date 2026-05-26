@@ -247,7 +247,7 @@ class HomeViewModel @Inject constructor(
     fun startDownload(context: Context, file: AListFile) {
         val url = generateDirectLink(file) ?: return
         viewModelScope.launch {
-            val saveDir = Environment.getExternalPublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
+            val saveDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
             val savePath = "$saveDir/${file.name}"
             val taskId = transferRepository.addTask(file.name, url, savePath)
             

@@ -55,7 +55,7 @@ class DownloadService : Service() {
 
         when (action) {
             ACTION_START -> {
-                startForegroundService(createNotification("Starting download...", 0, 100))
+                startForeground(NOTIFICATION_ID, createNotification("Starting download...", 0, 100))
                 if (taskId != -1L) {
                     startDownload(taskId)
                 }
