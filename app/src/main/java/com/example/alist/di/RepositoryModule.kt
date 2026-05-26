@@ -2,8 +2,10 @@ package com.example.alist.di
 
 import com.example.alist.data.repository.AuthRepositoryImpl
 import com.example.alist.data.repository.FileRepositoryImpl
+import com.example.alist.data.repository.TransferRepositoryImpl
 import com.example.alist.domain.repository.AuthRepository
 import com.example.alist.domain.repository.FileRepository
+import com.example.alist.domain.repository.TransferRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -25,4 +27,10 @@ abstract class RepositoryModule {
     abstract fun bindFileRepository(
         fileRepositoryImpl: FileRepositoryImpl
     ): FileRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindTransferRepository(
+        transferRepositoryImpl: TransferRepositoryImpl
+    ): TransferRepository
 }

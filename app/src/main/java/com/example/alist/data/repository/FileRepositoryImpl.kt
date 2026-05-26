@@ -88,4 +88,13 @@ class FileRepositoryImpl @Inject constructor(
             Result.failure(e)
         }
     }
+
+    override suspend fun getTextFileContent(url: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val responseBody = apiService.downloadFile(url)
+            Result.success(responseBody.string())
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

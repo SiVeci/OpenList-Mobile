@@ -8,4 +8,5 @@ interface FileRepository {
     suspend fun mkdir(path: String): Result<Unit>
     suspend fun rename(newName: String, path: String): Result<Unit>
     suspend fun remove(dir: String, names: List<String>): Result<Unit>
+    suspend fun getTextFileContent(url: String): Result<String>
 }

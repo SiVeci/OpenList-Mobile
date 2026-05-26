@@ -1,11 +1,16 @@
 package com.example.alist.ui.home
 
+import android.content.Context
+import android.content.Intent
+import android.os.Environment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.alist.data.local.ServerProfile
 import com.example.alist.data.remote.model.AListFile
 import com.example.alist.domain.repository.AuthRepository
 import com.example.alist.domain.repository.FileRepository
+import com.example.alist.domain.repository.TransferRepository
+import com.example.alist.service.DownloadService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,13 +52,18 @@ data class HomeUiState(
     val isLoadingMore: Boolean = false,
     val error: String? = null,
     val hasMore: Boolean = false,
-    val page: Int = 1
+    val page: Int = 1,
+    
+    val previewTextContent: String? = null,
+    val previewTextFileName: String? = null,
+    val isPreviewingTextLoading: Boolean = false
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val fileRepository: FileRepository
+    private val fileRepository: FileRepository,
+    private val transferRepository: TransferRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -201,12 +211,29 @@ class HomeViewModel @Inject constructor(
     }
 
     // --- Phase 5: Media Preview / Direct Link Generation ---
+    fun loadTextPreview(file: AListFile) {
+        val url = generateDirectLink(file) ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isPreviewingTextLoading = true, previewTextFileName = file.name, previewTextContent = null) }
+            val result = fileRepository.getTextFileContent(url)
+            _uiState.update { 
+                it.copy(
+                    isPreviewingTextLoading = false,
+                    previewTextContent = result.getOrNull() ?: "Failed to load content: ${result.exceptionOrNull()?.message}"
+                ) 
+            }
+        }
+    }
+
+    fun clearTextPreview() {
+        _uiState.update { it.copy(previewTextContent = null, previewTextFileName = null, isPreviewingTextLoading = false) }
+    }
+
     fun generateDirectLink(file: AListFile): String? {
-        val baseUrl = _uiState.value.currentProfile?.serverUrl ?: return null
+        val baseUrl = _uiState.value.currentProfile?.serverUrl?.trimEnd('/') ?: return null
         val current = _uiState.value.currentPath
         val fullPath = if (current == "/") "/${file.name}" else "$current/${file.name}"
         
-        // Encode each segment of the path, keep '/' intact
         val encodedSegments = fullPath.split("/").map {
             if (it.isEmpty()) "" else URLEncoder.encode(it, "UTF-8").replace("+", "%20")
         }
@@ -214,6 +241,22 @@ class HomeViewModel @Inject constructor(
         
         val signQuery = if (file.sign.isNotBlank()) "?sign=${file.sign}" else ""
         return "$baseUrl/d$encodedPath$signQuery"
+    }
+
+    // --- Phase 6: Background Download ---
+    fun startDownload(context: Context, file: AListFile) {
+        val url = generateDirectLink(file) ?: return
+        viewModelScope.launch {
+            val saveDir = Environment.getExternalPublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
+            val savePath = "$saveDir/${file.name}"
+            val taskId = transferRepository.addTask(file.name, url, savePath)
+            
+            val intent = Intent(context, DownloadService::class.java).apply {
+                action = DownloadService.ACTION_START
+                putExtra(DownloadService.EXTRA_TASK_ID, taskId)
+            }
+            context.startForegroundService(intent)
+        }
     }
 
     // -- Filter and Sort Updates --

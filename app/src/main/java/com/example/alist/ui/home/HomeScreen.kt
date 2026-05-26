@@ -40,9 +40,14 @@ import com.example.alist.data.remote.model.AListFile
 import java.net.URLEncoder
 import java.util.Locale
 
+import androidx.compose.material.icons.filled.Download
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
+fun HomeScreen(
+    onNavigateToTransfer: () -> Unit,
+    viewModel: HomeViewModel = hiltViewModel()
+) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
@@ -52,9 +57,11 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
     var deleteTarget by remember { mutableStateOf<AListFile?>(null) }
     var previewImageUrl by remember { mutableStateOf<String?>(null) }
 
-    BackHandler(enabled = uiState.currentPath != "/" || previewImageUrl != null) {
+    BackHandler(enabled = uiState.currentPath != "/" || previewImageUrl != null || uiState.previewTextContent != null || uiState.isPreviewingTextLoading) {
         if (previewImageUrl != null) {
             previewImageUrl = null
+        } else if (uiState.previewTextContent != null || uiState.isPreviewingTextLoading) {
+            viewModel.clearTextPreview()
         } else {
             viewModel.navigateBack()
         }
@@ -84,6 +91,9 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
                 },
                 actions = {
                     if (uiState.profiles.isNotEmpty()) {
+                        IconButton(onClick = onNavigateToTransfer) {
+                            Icon(Icons.Default.Download, contentDescription = "Transfer Manager")
+                        }
                         var expanded by remember { mutableStateOf(false) }
                         IconButton(onClick = { expanded = true }) {
                             Icon(Icons.Default.ArrowDropDown, contentDescription = "Switch Server")
@@ -231,6 +241,42 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
             }
         }
     }
+
+    // --- Text Preview Overlay ---
+    if (uiState.isPreviewingTextLoading || uiState.previewTextContent != null) {
+        Dialog(
+            onDismissRequest = { viewModel.clearTextPreview() },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    TopAppBar(
+                        title = { Text(uiState.previewTextFileName ?: "Text Preview") },
+                        navigationIcon = {
+                            IconButton(onClick = { viewModel.clearTextPreview() }) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Close")
+                            }
+                        }
+                    )
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        if (uiState.isPreviewingTextLoading) {
+                            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                        } else {
+                            Text(
+                                text = uiState.previewTextContent ?: "",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState())
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(16.dp),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -370,11 +416,13 @@ fun FileBrowserView(
                         val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "flv", "webm")
                         val isImage = ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
                         val isDoc = ext in listOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx")
+                        val isText = ext in listOf("txt", "json", "yaml", "yml", "xml", "js", "kt", "md", "ini", "conf", "sh", "bat", "log", "csv", "csv")
 
                         val icon = if (file.is_dir) Icons.Rounded.Folder
                         else when {
                             isVideo -> Icons.Rounded.Movie
                             isImage -> Icons.Rounded.Image
+                            isDoc || isText -> Icons.Rounded.InsertDriveFile
                             else -> Icons.Rounded.InsertDriveFile
                         }
 
@@ -397,6 +445,19 @@ fun FileBrowserView(
                                         Icon(Icons.Default.MoreVert, contentDescription = "More Options")
                                     }
                                     DropdownMenu(expanded = moreMenuExpanded, onDismissRequest = { moreMenuExpanded = false }) {
+                                        if (!file.is_dir) {
+                                            DropdownMenuItem(
+                                                text = { Text("下载文件") },
+                                                onClick = {
+                                                    moreMenuExpanded = false
+                                                    if (!com.example.alist.utils.PermissionUtils.hasNotificationPermission(context)) {
+                                                        com.example.alist.utils.PermissionUtils.requestNotificationPermission(context as android.app.Activity, 1001)
+                                                    } else {
+                                                        viewModel.startDownload(context, file)
+                                                    }
+                                                }
+                                            )
+                                        }
                                         DropdownMenuItem(
                                             text = { Text("重命名") },
                                             onClick = {
@@ -418,6 +479,10 @@ fun FileBrowserView(
                                 if (file.is_dir) {
                                     viewModel.navigateToFolder(file.name)
                                 } else {
+                                    if (isText) {
+                                        viewModel.loadTextPreview(file)
+                                        return@clickable
+                                    }
                                     val directLink = viewModel.generateDirectLink(file) ?: return@clickable
                                     when {
                                         isImage -> {

@@ -35,4 +35,7 @@ interface AListApiService {
         @Url url: String,
         @Body request: RemoveRequest
     ): AListResponse<Any>
+
+    @retrofit2.http.GET
+    suspend fun downloadFile(@Url url: String): okhttp3.ResponseBody
 }

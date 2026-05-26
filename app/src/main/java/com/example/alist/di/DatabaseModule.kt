@@ -5,12 +5,7 @@ import androidx.room.Room
 import com.example.alist.data.local.AppDatabase
 import com.example.alist.data.local.DirectoryCacheDao
 import com.example.alist.data.local.ServerProfileDao
-import dagger.Module
-import dagger.Provides
-import dagger.hilt.InstallIn
-import dagger.hilt.android.qualifiers.ApplicationContext
-import dagger.hilt.components.SingletonComponent
-import javax.inject.Singleton
+import com.example.alist.data.local.TransferTaskDao
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -33,5 +28,10 @@ object DatabaseModule {
     @Provides
     fun provideDirectoryCacheDao(database: AppDatabase): DirectoryCacheDao {
         return database.directoryCacheDao()
+    }
+
+    @Provides
+    fun provideTransferTaskDao(database: AppDatabase): TransferTaskDao {
+        return database.transferTaskDao()
     }
 }
