@@ -28,6 +28,7 @@ interface SAFModuleInterface {
   listFiles(treeUri: string): Promise<SAFFileInfo[]>;
   readFile(uri: string): Promise<number[]>;
   writeFile(treeUri: string, fileName: string, base64Data: string, mimeType: string): Promise<string>;
+  copyFileToSAF(sourcePath: string, treeUriStr: string, fileName: string, mimeType: string): Promise<string>;
   downloadFileToSAF(url: String, treeUriStr: String, fileName: String, mimeType: String, headerAuth: String): Promise<string>;
   deleteFile(uri: string): Promise<boolean>;
   getFileDetail(uri: string): Promise<{ name: string; size: number; uri: string }>;
