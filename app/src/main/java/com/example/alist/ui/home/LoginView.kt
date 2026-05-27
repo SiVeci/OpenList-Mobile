@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.window.Popup
@@ -63,6 +65,8 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
     )
     
     val focusManager = LocalFocusManager.current
+    val density = LocalDensity.current
+    val popupYOffset = with(density) { 52.dp.roundToPx() }
 
     val primaryColor = Color(0xFF4C45E5)
     val backgroundColor = Color(0xFFF8F9FA)
@@ -161,13 +165,13 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                 if (historyExpanded) {
                     Popup(
                         onDismissRequest = { historyExpanded = false },
-                        properties = PopupProperties(focusable = true)
+                        properties = PopupProperties(focusable = true),
+                        offset = IntOffset(0, popupYOffset)
                     ) {
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 24.dp) // Margin from screen edges like the textfields
-                                .padding(top = 52.dp), // Position below the TextField
+                                .padding(horizontal = 24.dp), // Margin from screen edges like the textfields
                             shape = RoundedCornerShape(16.dp),
                             color = Color.White,
                             shadowElevation = 8.dp
