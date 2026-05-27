@@ -49,32 +49,25 @@ class DownloadService : Service() {
         createNotificationChannel()
     }
 
+    private var isWorkerRunning = false
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
         val taskId = intent?.getLongExtra(EXTRA_TASK_ID, -1L) ?: -1L
 
         when (action) {
-            ACTION_START -> {
+            ACTION_START, ACTION_RESUME -> {
                 startForeground(NOTIFICATION_ID, createNotification("Starting download...", 0, 100))
-                if (activeJob == null || activeJob?.isCompleted == true) {
-                    checkAndDownloadNext()
-                }
+                startWorker()
             }
             ACTION_PAUSE -> {
-                activeJob?.cancel()
                 if (taskId != -1L) {
                     serviceScope.launch {
                         val task = transferTaskDao.getTaskById(taskId)
                         if (task != null) {
                             transferTaskDao.update(task.copy(status = TransferStatus.PAUSED))
                         }
-                        checkAndDownloadNext()
                     }
-                }
-            }
-            ACTION_RESUME -> {
-                if (activeJob == null || activeJob?.isCompleted == true) {
-                    checkAndDownloadNext()
                 }
             }
             ACTION_CANCEL -> {
@@ -85,109 +78,105 @@ class DownloadService : Service() {
                         if (task != null) {
                             transferTaskDao.update(task.copy(status = TransferStatus.ERROR, errorMsg = "Cancelled"))
                         }
-                        checkAndDownloadNext()
                     }
-                } else {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
                 }
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
             }
         }
         return START_NOT_STICKY
     }
 
-    private fun checkAndDownloadNext() {
-        activeJob?.cancel()
+    private fun startWorker() {
+        if (isWorkerRunning) return
+        isWorkerRunning = true
+        
         activeJob = serviceScope.launch {
-            val nextTask = transferTaskDao.getNextQueuedTask()
-            if (nextTask != null) {
-                startDownload(nextTask.id)
-            } else {
-                val activeTasks = transferTaskDao.getTasksByStatus(TransferStatus.DOWNLOADING)
-                if (activeTasks.isEmpty()) {
-                    delay(1000)
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
+            try {
+                while (isActive) {
+                    val nextTask = transferTaskDao.getNextQueuedTask()
+                    if (nextTask == null) {
+                        // No more tasks in queue
+                        break
+                    }
+                    // Process the task synchronously within this coroutine
+                    downloadFile(nextTask.id)
                 }
+            } finally {
+                isWorkerRunning = false
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
             }
         }
     }
 
-    private fun startDownload(taskId: Long) {
-        activeJob?.cancel()
-        activeJob = serviceScope.launch {
-            val task = transferTaskDao.getTaskById(taskId) ?: return@launch
-            if (task.status == TransferStatus.SUCCESS) {
-                checkAndDownloadNext()
-                return@launch
+    private suspend fun downloadFile(taskId: Long) {
+        val task = transferTaskDao.getTaskById(taskId) ?: return
+        
+        val downloadingTask = task.copy(status = TransferStatus.DOWNLOADING)
+        transferTaskDao.update(downloadingTask)
+
+        try {
+            val file = File(downloadingTask.savePath)
+            val downloaded = if (file.exists()) file.length() else 0L
+
+            val requestBuilder = Request.Builder().url(downloadingTask.fileUrl)
+            if (downloaded > 0) {
+                requestBuilder.addHeader("Range", "bytes=$downloaded-")
             }
-            
-            val downloadingTask = task.copy(status = TransferStatus.DOWNLOADING)
-            transferTaskDao.update(downloadingTask)
 
-            try {
-                val file = File(downloadingTask.savePath)
-                val downloaded = if (file.exists()) file.length() else 0L
+            val request = requestBuilder.build()
+            val response = withContext(Dispatchers.IO) {
+                okHttpClient.newCall(request).execute()
+            }
 
-                val requestBuilder = Request.Builder().url(downloadingTask.fileUrl)
-                if (downloaded > 0) {
-                    requestBuilder.addHeader("Range", "bytes=$downloaded-")
+            if (!response.isSuccessful) {
+                if (response.code == 416) {
+                    transferTaskDao.update(task.copy(status = TransferStatus.SUCCESS))
+                    return
                 }
+                throw Exception("HTTP ${response.code}")
+            }
 
-                val request = requestBuilder.build()
-                val response = okHttpClient.newCall(request).execute()
+            val body = response.body ?: throw Exception("Empty body")
+            val contentLength = body.contentLength()
+            val total = if (downloaded > 0) downloaded + contentLength else contentLength
 
-                if (!response.isSuccessful) {
-                    if (response.code == 416) { // Requested Range Not Satisfiable - maybe already finished?
-                        transferTaskDao.update(task.copy(status = TransferStatus.SUCCESS))
-                        checkAndDownloadNext()
-                        return@launch
-                    }
-                    throw Exception("HTTP ${response.code}")
-                }
+            var currentTask = downloadingTask.copy(totalBytes = total, downloadedBytes = downloaded)
+            transferTaskDao.update(currentTask)
 
-                val body = response.body ?: throw Exception("Empty body")
-                val contentLength = body.contentLength()
-                val total = if (downloaded > 0) downloaded + contentLength else contentLength
+            body.byteStream().use { input ->
+                FileOutputStream(file, downloaded > 0).use { output ->
+                    val buffer = ByteArray(8 * 1024)
+                    var bytesRead: Int
+                    var lastUpdateTime = System.currentTimeMillis()
 
-                var currentTask = downloadingTask.copy(totalBytes = total, downloadedBytes = downloaded)
-                transferTaskDao.update(currentTask)
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        if (!coroutineContext.isActive) throw CancellationException()
 
-                body.byteStream().use { input ->
-                    FileOutputStream(file, downloaded > 0).use { output ->
-                        val buffer = ByteArray(8 * 1024)
-                        var bytesRead: Int
-                        var lastUpdateTime = System.currentTimeMillis()
+                        output.write(buffer, 0, bytesRead)
+                        currentTask = currentTask.copy(downloadedBytes = currentTask.downloadedBytes + bytesRead)
 
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            if (!isActive) throw CancellationException()
-
-                            output.write(buffer, 0, bytesRead)
-                            currentTask = currentTask.copy(downloadedBytes = currentTask.downloadedBytes + bytesRead)
-
-                            val now = System.currentTimeMillis()
-                            if (now - lastUpdateTime > 500) {
-                                lastUpdateTime = now
-                                transferTaskDao.update(currentTask)
-                                updateNotification("Downloading: ${currentTask.fileName}", currentTask.downloadedBytes, currentTask.totalBytes)
-                            }
+                        val now = System.currentTimeMillis()
+                        if (now - lastUpdateTime > 500) {
+                            lastUpdateTime = now
+                            transferTaskDao.update(currentTask)
+                            updateNotification("Downloading: ${currentTask.fileName}", currentTask.downloadedBytes, currentTask.totalBytes)
                         }
                     }
                 }
-
-                transferTaskDao.update(currentTask.copy(status = TransferStatus.SUCCESS))
-                updateNotification("Download complete: ${currentTask.fileName}", 100, 100)
-                delay(1000)
-                checkAndDownloadNext()
-
-            } catch (e: CancellationException) {
-                // Task was paused or cancelled
-            } catch (e: Exception) {
-                transferTaskDao.update(task.copy(status = TransferStatus.ERROR, errorMsg = e.message))
-                updateNotification("Download failed: ${task.fileName}", 0, 100)
-                delay(1000)
-                checkAndDownloadNext()
             }
+
+            transferTaskDao.update(currentTask.copy(status = TransferStatus.SUCCESS))
+            updateNotification("Download complete: ${currentTask.fileName}", 100, 100)
+            delay(1000)
+
+        } catch (e: CancellationException) {
+            // Task was paused or cancelled by user
+        } catch (e: Exception) {
+            transferTaskDao.update(task.copy(status = TransferStatus.ERROR, errorMsg = e.message))
+            updateNotification("Download failed: ${task.fileName}", 0, 100)
+            delay(1000)
         }
     }
 
