@@ -8,15 +8,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.InsertDriveFile
@@ -27,20 +27,24 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.example.alist.data.remote.model.AListFile
+import com.example.alist.ui.components.EmptyState
+import com.example.alist.ui.components.ErrorState
+import com.example.alist.ui.components.FileItemCard
+import com.example.alist.ui.components.TextPreviewOverlay
 import java.net.URLEncoder
-import java.util.Locale
-
-import androidx.compose.material.icons.filled.Download
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,7 +55,6 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    // Dialog & Overlay States
     var showMkdirDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<AListFile?>(null) }
     var deleteTarget by remember { mutableStateOf<AListFile?>(null) }
@@ -72,12 +75,16 @@ fun HomeScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(uiState.currentProfile?.serverUrl ?: "OpenList")
+                        Text(
+                            text = uiState.currentProfile?.serverUrl ?: "OpenList",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                         if (uiState.currentPath != "/") {
                             Text(
                                 text = uiState.currentPath,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                             )
                         }
                     }
@@ -118,12 +125,19 @@ fun HomeScreen(
                             }
                         }
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
             )
         },
         floatingActionButton = {
             if (uiState.profiles.isNotEmpty() && uiState.currentProfile != null) {
-                FloatingActionButton(onClick = { showMkdirDialog = true }) {
+                FloatingActionButton(
+                    onClick = { showMkdirDialog = true },
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                ) {
                     Icon(Icons.Default.Add, contentDescription = "New Folder")
                 }
             }
@@ -131,16 +145,23 @@ fun HomeScreen(
         bottomBar = {
             val sharedUris by viewModel.shareManager.sharedUris.collectAsState()
             if (sharedUris.isNotEmpty()) {
-                BottomAppBar {
+                Surface(
+                    tonalElevation = 3.dp,
+                    shadowElevation = 8.dp,
+                    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("上传 ${sharedUris.size} 个文件到当前目录", style = MaterialTheme.typography.bodyMedium)
-                        Row {
+                        Text(
+                            "上传 ${sharedUris.size} 个文件到当前目录",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = { viewModel.shareManager.clearSharedUris() }) {
                                 Text("取消")
                             }
@@ -151,7 +172,8 @@ fun HomeScreen(
                     }
                 }
             }
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -267,40 +289,12 @@ fun HomeScreen(
     }
 
     // --- Text Preview Overlay ---
-    if (uiState.isPreviewingTextLoading || uiState.previewTextContent != null) {
-        Dialog(
-            onDismissRequest = { viewModel.clearTextPreview() },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    TopAppBar(
-                        title = { Text(uiState.previewTextFileName ?: "Text Preview") },
-                        navigationIcon = {
-                            IconButton(onClick = { viewModel.clearTextPreview() }) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Close")
-                            }
-                        }
-                    )
-                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        if (uiState.isPreviewingTextLoading) {
-                            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                        } else {
-                            Text(
-                                text = uiState.previewTextContent ?: "",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(rememberScrollState())
-                                    .horizontalScroll(rememberScrollState())
-                                    .padding(16.dp),
-                                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
+    TextPreviewOverlay(
+        content = uiState.previewTextContent,
+        isLoading = uiState.isPreviewingTextLoading,
+        fileName = uiState.previewTextFileName,
+        onDismiss = { viewModel.clearTextPreview() }
+    )
 }
 
 @Composable
@@ -312,25 +306,80 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(horizontal = 24.dp, vertical = 32.dp)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.Center
     ) {
-        OutlinedTextField(value = serverUrl, onValueChange = { serverUrl = it }, label = { Text("Server URL") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Username") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Password") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+        Text(
+            text = "OpenList",
+            style = MaterialTheme.typography.headlineLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "连接到您的 AList 服务器",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+
+        OutlinedTextField(
+            value = serverUrl,
+            onValueChange = { serverUrl = it },
+            label = { Text("Server URL") },
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = username,
+            onValueChange = { username = it },
+            label = { Text("Username") },
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Password") },
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium
+        )
+        Spacer(modifier = Modifier.height(20.dp))
 
         Button(
             onClick = { viewModel.testLoginAndFetch(serverUrl, username, password) },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !uiState.isLoading
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            enabled = !uiState.isLoading,
+            shape = MaterialTheme.shapes.medium
         ) {
-            Text(if (uiState.isLoading) "Logging in..." else "Login")
+            if (uiState.isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(if (uiState.isLoading) "连接中..." else "登录")
         }
 
         if (uiState.error != null) {
-            Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error)
+            Spacer(modifier = Modifier.height(16.dp))
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.errorContainer
+            ) {
+                Text(
+                    text = uiState.error!!,
+                    modifier = Modifier.padding(12.dp),
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 }
@@ -360,220 +409,393 @@ fun FileBrowserView(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // --- Filter & Sort Bar ---
+        Surface(
+            tonalElevation = 1.dp,
+            color = MaterialTheme.colorScheme.background
         ) {
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterCategory.values().forEach { cat ->
-                    FilterChip(
-                        selected = uiState.filterCategory == cat,
-                        onClick = { viewModel.updateFilterCategory(cat) },
-                        label = { Text(cat.label) }
-                    )
-                }
-            }
-            Box {
-                var expanded by remember { mutableStateOf(false) }
-                IconButton(onClick = { expanded = true }) {
-                    Icon(Icons.Default.Sort, contentDescription = "Sort")
-                }
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    DropdownMenuItem(text = { Text("按名称 ${if(uiState.sortBy == SortBy.Name) "✓" else ""}") }, onClick = { viewModel.updateSortBy(SortBy.Name); expanded = false })
-                    DropdownMenuItem(text = { Text("按大小 ${if(uiState.sortBy == SortBy.Size) "✓" else ""}") }, onClick = { viewModel.updateSortBy(SortBy.Size); expanded = false })
-                    DropdownMenuItem(text = { Text("按时间 ${if(uiState.sortBy == SortBy.Time) "✓" else ""}") }, onClick = { viewModel.updateSortBy(SortBy.Time); expanded = false })
-                    HorizontalDivider()
-                    DropdownMenuItem(
-                        text = { Text(if (uiState.sortOrder == SortOrder.Asc) "正序 (点击切换)" else "倒序 (点击切换)") },
-                        onClick = {
-                            viewModel.updateSortOrder(if (uiState.sortOrder == SortOrder.Asc) SortOrder.Desc else SortOrder.Asc)
-                            expanded = false
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 4.dp, top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterCategory.values().forEach { cat ->
+                            FilterChip(
+                                selected = uiState.filterCategory == cat,
+                                onClick = { viewModel.updateFilterCategory(cat) },
+                                label = {
+                                    Text(
+                                        cat.label,
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ),
+                                shape = MaterialTheme.shapes.small
+                            )
                         }
-                    )
-                    HorizontalDivider()
-                    DropdownMenuItem(
-                        text = { Text("文件夹置顶") },
-                        trailingIcon = { Switch(checked = uiState.foldersOnTop, onCheckedChange = null) },
-                        onClick = { viewModel.updateFoldersOnTop(!uiState.foldersOnTop); expanded = false }
-                    )
+                    }
+                    Box {
+                        var expanded by remember { mutableStateOf(false) }
+                        IconButton(onClick = { expanded = true }) {
+                            Icon(Icons.Default.Sort, contentDescription = "Sort")
+                        }
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            DropdownMenuItem(
+                                text = { Text("按名称 ${if (uiState.sortBy == SortBy.Name) "✓" else ""}") },
+                                onClick = { viewModel.updateSortBy(SortBy.Name); expanded = false }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("按大小 ${if (uiState.sortBy == SortBy.Size) "✓" else ""}") },
+                                onClick = { viewModel.updateSortBy(SortBy.Size); expanded = false }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("按时间 ${if (uiState.sortBy == SortBy.Time) "✓" else ""}") },
+                                onClick = { viewModel.updateSortBy(SortBy.Time); expanded = false }
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = {
+                                    Text(if (uiState.sortOrder == SortOrder.Asc) "正序 (点击切换)" else "倒序 (点击切换)")
+                                },
+                                onClick = {
+                                    viewModel.updateSortOrder(
+                                        if (uiState.sortOrder == SortOrder.Asc) SortOrder.Desc else SortOrder.Asc
+                                    )
+                                    expanded = false
+                                }
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("文件夹置顶") },
+                                trailingIcon = {
+                                    Switch(
+                                        checked = uiState.foldersOnTop,
+                                        onCheckedChange = null
+                                    )
+                                },
+                                onClick = {
+                                    viewModel.updateFoldersOnTop(!uiState.foldersOnTop)
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
                 }
+
+                OutlinedTextField(
+                    value = uiState.filterSuffix,
+                    onValueChange = { viewModel.updateFilterSuffix(it) },
+                    placeholder = { Text("精确后缀过滤 (如 .mp4)") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.medium
+                )
             }
         }
-        OutlinedTextField(
-            value = uiState.filterSuffix,
-            onValueChange = { viewModel.updateFilterSuffix(it) },
-            placeholder = { Text("精确后缀过滤 (如 .mp4)") },
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // --- File List ---
+        Box(
             modifier = Modifier
+                .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .height(56.dp),
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Box(modifier = Modifier
-            .weight(1f)
-            .nestedScroll(pullToRefreshState.nestedScrollConnection)) {
-            if (uiState.isLoading && uiState.files.isEmpty()) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            } else if (uiState.error != null && uiState.files.isEmpty()) {
-                Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(uiState.error!!, color = MaterialTheme.colorScheme.error)
-                    Spacer(Modifier.height(8.dp))
-                    Button(onClick = { viewModel.refresh() }) { Text("Retry") }
-                }
-            } else if (uiState.files.isEmpty()) {
-                Text("Empty Directory", modifier = Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(uiState.files.size) { index ->
-                        val file = uiState.files[index]
-                        
-                        val ext = file.name.substringAfterLast('.').lowercase()
-                        val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "flv", "webm")
-                        val isImage = ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
-                        val isDoc = ext in listOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx")
-                        val isText = ext in listOf("txt", "json", "yaml", "yml", "xml", "js", "kt", "md", "ini", "conf", "sh", "bat", "log", "csv", "csv")
-
-                        val icon = if (file.is_dir) Icons.Rounded.Folder
-                        else when {
-                            isVideo -> Icons.Rounded.Movie
-                            isImage -> Icons.Rounded.Image
-                            isDoc || isText -> Icons.Rounded.InsertDriveFile
-                            else -> Icons.Rounded.InsertDriveFile
-                        }
-
-                        val timeString = try {
-                            file.modified.substringBefore("T") + " " + file.modified.substringAfter("T").substringBeforeLast(":")
-                        } catch (e: Exception) {
-                            file.modified
-                        }
-                        
-                        val sizeString = if (file.is_dir) "" else formatFileSize(file.size)
-                        
-                        ListItem(
-                            headlineContent = { Text(file.name) },
-                            supportingContent = { Text("$timeString  $sizeString".trim()) },
-                            leadingContent = { Icon(icon, contentDescription = null, tint = if (file.is_dir) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) },
-                            trailingContent = {
-                                Box {
-                                    var moreMenuExpanded by remember { mutableStateOf(false) }
-                                    IconButton(onClick = { moreMenuExpanded = true }) {
-                                        Icon(Icons.Default.MoreVert, contentDescription = "More Options")
-                                    }
-                                    DropdownMenu(expanded = moreMenuExpanded, onDismissRequest = { moreMenuExpanded = false }) {
-                                        if (!file.is_dir) {
-                                            DropdownMenuItem(
-                                                text = { Text("分享直链") },
-                                                onClick = {
-                                                    moreMenuExpanded = false
-                                                    val url = viewModel.generateDirectLink(file)
-                                                    if (url != null) {
-                                                        val sendIntent = Intent().apply {
-                                                            action = Intent.ACTION_SEND
-                                                            putExtra(Intent.EXTRA_TEXT, url)
-                                                            type = "text/plain"
-                                                        }
-                                                        val shareIntent = Intent.createChooser(sendIntent, "分享直链")
-                                                        context.startActivity(shareIntent)
-                                                    }
-                                                }
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text("下载文件") },
-                                                onClick = {
-                                                    moreMenuExpanded = false
-                                                    if (!com.example.alist.utils.PermissionUtils.hasNotificationPermission(context)) {
-                                                        com.example.alist.utils.PermissionUtils.requestNotificationPermission(context as android.app.Activity, 1001)
-                                                    } else {
-                                                        viewModel.startDownload(context, file)
-                                                    }
-                                                }
-                                            )
-                                        }
-                                        DropdownMenuItem(
-                                            text = { Text("重命名") },
-                                            onClick = {
-                                                moreMenuExpanded = false
-                                                onRenameRequest(file)
-                                            }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("删除", color = MaterialTheme.colorScheme.error) },
-                                            onClick = {
-                                                moreMenuExpanded = false
-                                                onDeleteRequest(file)
-                                            }
-                                        )
-                                    }
-                                }
-                            },
-                            modifier = Modifier.clickable {
-                                if (file.is_dir) {
-                                    viewModel.navigateToFolder(file.name)
-                                } else {
-                                    if (isText) {
-                                        viewModel.loadTextPreview(file)
-                                        return@clickable
-                                    }
-                                    val directLink = viewModel.generateDirectLink(file) ?: return@clickable
-                                    when {
-                                        isImage -> {
-                                            onImagePreview(directLink)
-                                        }
-                                        isVideo -> {
-                                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                                setDataAndType(Uri.parse(directLink), "video/*")
-                                            }
-                                            context.startActivity(Intent.createChooser(intent, "选择播放器"))
-                                        }
-                                        isDoc -> {
-                                            val encodedUrl = URLEncoder.encode(directLink, "UTF-8")
-                                            val previewUrl = "https://view.officeapps.live.com/op/view.aspx?src=$encodedUrl"
-                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(previewUrl))
-                                            context.startActivity(intent)
-                                        }
-                                    }
-                                }
-                            }
+                .nestedScroll(pullToRefreshState.nestedScrollConnection)
+                .clipToBounds() // Hide resting pull-to-refresh shadow/edge
+        ) {
+            when {
+                uiState.isLoading && uiState.files.isEmpty() -> {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(36.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 3.dp
                         )
-
-                        if (index == uiState.files.size - 1 && uiState.hasMore) {
-                            LaunchedEffect(Unit) {
-                                viewModel.loadMore()
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            "加载中...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                uiState.error != null && uiState.files.isEmpty() -> {
+                    ErrorState(
+                        message = uiState.error!!,
+                        onRetry = { viewModel.refresh() },
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+                uiState.files.isEmpty() -> {
+                    EmptyState(
+                        title = "空目录",
+                        subtitle = "点击右下角按钮新建文件夹",
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+                else -> {
+                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                        if (maxWidth > 600.dp) {
+                            val columns = if (maxWidth > 900.dp) 3 else 2
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(columns),
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(uiState.files.size) { index ->
+                                    FileGridItem(
+                                        file = uiState.files[index],
+                                        viewModel = viewModel,
+                                        context = context,
+                                        onRenameRequest = onRenameRequest,
+                                        onDeleteRequest = onDeleteRequest,
+                                        onImagePreview = onImagePreview
+                                    )
+                                }
+                                item {
+                                    Spacer(modifier = Modifier.height(80.dp))
+                                }
                             }
-                            Box(modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator()
+                        } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(uiState.files.size) { index ->
+                                val file = uiState.files[index]
+                                FileItemCard(
+                                    file = file,
+                                    onClick = {
+                                        handleFileClick(file, viewModel, context, onImagePreview = onImagePreview)
+                                    },
+                                    trailingContent = {
+                                        var moreMenuExpanded by remember { mutableStateOf(false) }
+                                        Box {
+                                            IconButton(onClick = { moreMenuExpanded = true }) {
+                                                Icon(Icons.Default.MoreVert, contentDescription = "More Options")
+                                            }
+                                            DropdownMenu(
+                                                expanded = moreMenuExpanded,
+                                                onDismissRequest = { moreMenuExpanded = false }
+                                            ) {
+                                                if (!file.is_dir) {
+                                                    DropdownMenuItem(
+                                                        text = { Text("分享直链") },
+                                                        onClick = {
+                                                            moreMenuExpanded = false
+                                                            val url = viewModel.generateDirectLink(file)
+                                                            if (url != null) {
+                                                                val sendIntent = Intent().apply {
+                                                                    action = Intent.ACTION_SEND
+                                                                    putExtra(Intent.EXTRA_TEXT, url)
+                                                                    type = "text/plain"
+                                                                }
+                                                                val shareIntent = Intent.createChooser(sendIntent, "分享直链")
+                                                                context.startActivity(shareIntent)
+                                                            }
+                                                        }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("下载文件") },
+                                                        onClick = {
+                                                            moreMenuExpanded = false
+                                                            if (!com.example.alist.utils.PermissionUtils.hasNotificationPermission(context)) {
+                                                                com.example.alist.utils.PermissionUtils.requestNotificationPermission(context as android.app.Activity, 1001)
+                                                            } else {
+                                                                viewModel.startDownload(context, file)
+                                                            }
+                                                        }
+                                                    )
+                                                }
+                                                DropdownMenuItem(
+                                                    text = { Text("重命名") },
+                                                    onClick = {
+                                                        moreMenuExpanded = false
+                                                        onRenameRequest(file)
+                                                    }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("删除", color = MaterialTheme.colorScheme.error) },
+                                                    onClick = {
+                                                        moreMenuExpanded = false
+                                                        onDeleteRequest(file)
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                )
+
+                                if (index == uiState.files.size - 1 && uiState.hasMore) {
+                                    LaunchedEffect(Unit) {
+                                        viewModel.loadMore()
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                    }
+                                }
+                            }
+                            item {
+                                Spacer(modifier = Modifier.height(80.dp))
                             }
                         }
                     }
-                    item {
-                        // Pad bottom for FAB
-                        Spacer(modifier = Modifier.height(80.dp))
                     }
                 }
             }
 
             PullToRefreshContainer(
                 state = pullToRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter)
+                modifier = Modifier.align(Alignment.TopCenter),
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.primary
             )
         }
     }
 }
 
-fun formatFileSize(size: Long): String {
-    if (size <= 0L) return "0 B"
-    val units = arrayOf("B", "KB", "MB", "GB", "TB")
-    val digitGroups = (Math.log10(size.toDouble()) / Math.log10(1024.0)).toInt()
-    return String.format(Locale.getDefault(), "%.1f %s", size / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
+private fun handleFileClick(
+    file: AListFile,
+    viewModel: HomeViewModel,
+    context: android.content.Context,
+    onImagePreview: (String) -> Unit
+) {
+    if (file.is_dir) {
+        viewModel.navigateToFolder(file.name)
+        return
+    }
+
+    val ext = file.name.substringAfterLast('.').lowercase()
+    val isText = ext in listOf("txt", "json", "yaml", "yml", "xml", "js", "kt", "md", "ini", "conf", "sh", "bat", "log", "csv")
+    val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "flv", "webm")
+    val isImage = ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
+    val isDoc = ext in listOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx")
+
+    if (isText) {
+        viewModel.loadTextPreview(file)
+        return
+    }
+
+    val directLink = viewModel.generateDirectLink(file) ?: return
+
+    when {
+        isImage -> onImagePreview(directLink)
+        isVideo -> {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(Uri.parse(directLink), "video/*")
+            }
+            context.startActivity(Intent.createChooser(intent, "选择播放器"))
+        }
+        isDoc -> {
+            val encodedUrl = URLEncoder.encode(directLink, "UTF-8")
+            val previewUrl = "https://view.officeapps.live.com/op/view.aspx?src=$encodedUrl"
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(previewUrl))
+            context.startActivity(intent)
+        }
+    }
+}
+
+@Composable
+fun FileGridItem(
+    file: AListFile,
+    viewModel: HomeViewModel,
+    context: android.content.Context,
+    onRenameRequest: (AListFile) -> Unit,
+    onDeleteRequest: (AListFile) -> Unit,
+    onImagePreview: (String) -> Unit
+) {
+    val ext = file.name.substringAfterLast('.').lowercase()
+    val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "flv", "webm")
+    val isImage = ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
+
+    val icon = if (file.is_dir) Icons.Rounded.Folder
+    else when {
+        isVideo -> Icons.Rounded.Movie
+        isImage -> Icons.Rounded.Image
+        else -> Icons.Rounded.InsertDriveFile
+    }
+
+    val iconTint = if (file.is_dir) MaterialTheme.colorScheme.primary
+    else MaterialTheme.colorScheme.onSurfaceVariant
+
+    val timeString = try {
+        file.modified.substringBefore("T") + " " + file.modified.substringAfter("T").substringBeforeLast(":")
+    } catch (e: Exception) {
+        file.modified
+    }
+
+    val sizeString = if (file.is_dir) "" else com.example.alist.ui.components.formatFileSize(file.size)
+    val metaText = "$timeString  $sizeString".trim()
+
+    Card(
+        onClick = {
+            handleFileClick(file, viewModel, context, onImagePreview = onImagePreview)
+        },
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(MaterialTheme.shapes.small)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = file.name,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                textAlign = TextAlign.Center
+            )
+            if (metaText.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = metaText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    maxLines = 1
+                )
+            }
+        }
+    }
 }
