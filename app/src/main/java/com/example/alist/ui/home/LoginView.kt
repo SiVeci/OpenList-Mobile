@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Label
 import androidx.compose.material.icons.filled.Storage
@@ -281,64 +282,36 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                     .padding(12.dp)
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // HTTP/HTTPS Toggle (weight 0.8 to make it compact)
-                    Row(
+                    // 1. Protocol Toggle (Compact Icon Box)
+                    Box(
                         modifier = Modifier
-                            .weight(0.8f)
-                            .height(48.dp)
+                            .width(44.dp)
+                            .fillMaxHeight()
                             .clip(RoundedCornerShape(8.dp))
-                            .background(inputBackgroundColor)
+                            .background(if (isHttps) Color(0xFF10B981).copy(alpha = 0.1f) else inputBackgroundColor)
+                            .clickable {
+                                isHttps = !isHttps
+                                if (isHttps && port == "80") port = "443"
+                                if (!isHttps && port == "443") port = "80"
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .padding(4.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (!isHttps) Color.White else Color.Transparent)
-                                .clickable { 
-                                    isHttps = false
-                                    if(port == "443") port = "80"
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "HTTP", 
-                                fontSize = 12.sp, 
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (!isHttps) primaryColor else Color(0xFF94A3B8)
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .padding(4.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (isHttps) Color.White else Color.Transparent)
-                                .clickable { 
-                                    isHttps = true
-                                    if(port == "80") port = "443"
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "HTTPS", 
-                                fontSize = 12.sp, 
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (isHttps) primaryColor else Color(0xFF94A3B8)
-                            )
-                        }
+                        Icon(
+                            imageVector = if (isHttps) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
+                            contentDescription = "Toggle Protocol",
+                            tint = if (isHttps) Color(0xFF10B981) else Color(0xFF94A3B8),
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                     
-                    // Host (weight 1.5 to give it the most space)
+                    // 2. Host (Takes up all remaining space)
                     Row(
                         modifier = Modifier
-                            .weight(1.5f)
-                            .height(48.dp)
+                            .weight(1f)
+                            .fillMaxHeight()
                             .clip(RoundedCornerShape(8.dp))
                             .background(inputBackgroundColor)
                             .padding(horizontal = 10.dp),
@@ -354,7 +327,7 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                         Box(modifier = Modifier.fillMaxWidth()) {
                             if (host.isEmpty()) {
                                 Text(
-                                    text = "Domain/IP",
+                                    text = "Domain or IP",
                                     color = Color(0xFF94A3B8),
                                     fontSize = 14.sp
                                 )
@@ -370,18 +343,16 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                         }
                     }
                     
-                    // Port (weight 0.6 to fit max 5 digits like 18443)
+                    // 3. Port (Fixed tight width, pure numbers)
                     Row(
                         modifier = Modifier
-                            .weight(0.6f)
-                            .height(48.dp)
+                            .width(56.dp)
+                            .fillMaxHeight()
                             .clip(RoundedCornerShape(8.dp))
                             .background(inputBackgroundColor)
                             .padding(horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("#", color = Color(0xFFCBD5E1), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Spacer(modifier = Modifier.width(4.dp))
                         BasicTextField(
                             value = port,
                             onValueChange = { port = it },
@@ -396,7 +367,7 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
             }
         }
         
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         
         // Username
         CustomTextField(
@@ -406,7 +377,7 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
             placeholder = "Username"
         )
         
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         
         // Password
         CustomTextField(
@@ -417,7 +388,7 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
             isPassword = true
         )
         
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         // Connect Button
         Button(
@@ -429,9 +400,9 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
+                .height(48.dp),
             enabled = !uiState.isLoading && host.isNotBlank() && username.isNotBlank(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = primaryColor,
                 disabledContainerColor = primaryColor.copy(alpha = 0.5f)
@@ -439,19 +410,19 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
         ) {
             if (uiState.isLoading) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
+                    modifier = Modifier.size(20.dp),
                     color = Color.White,
                     strokeWidth = 2.dp
                 )
             } else {
-                Text("Connect Now", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("Connect Now", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.width(8.dp))
-                Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
             }
         }
 
         if (uiState.error != null) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = uiState.error!!,
                 color = MaterialTheme.colorScheme.error,
@@ -485,33 +456,33 @@ fun CustomTextField(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(52.dp)
+            .height(44.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(Color.White)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
             tint = Color(0xFFCBD5E1),
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(18.dp)
         )
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(10.dp))
         
         Box(modifier = Modifier.weight(1f)) {
             if (value.isEmpty()) {
                 Text(
                     text = placeholder,
                     color = Color(0xFF94A3B8),
-                    fontSize = 15.sp
+                    fontSize = 14.sp
                 )
             }
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
                 textStyle = TextStyle(
-                    fontSize = 15.sp, 
+                    fontSize = 14.sp, 
                     color = Color(0xFF334155), 
                     fontWeight = FontWeight.Medium
                 ),
