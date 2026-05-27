@@ -109,6 +109,20 @@ class HomeViewModel @Inject constructor(
             ) }
         }
     }
+    
+    fun deleteProfile(profile: ServerProfile) {
+        viewModelScope.launch {
+            authRepository.deleteProfile(profile.id)
+            if (_uiState.value.currentProfile?.id == profile.id) {
+                pathStack.clear()
+                _uiState.update { it.copy(
+                    files = emptyList(),
+                    currentPath = "/",
+                    currentProfile = null
+                ) }
+            }
+        }
+    }
 
     fun refresh() {
         fetchFiles(_uiState.value.currentPath, isRefresh = true)

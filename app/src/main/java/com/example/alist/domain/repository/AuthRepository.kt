@@ -9,4 +9,5 @@ interface AuthRepository {
     fun getAllProfiles(): Flow<List<ServerProfile>>
     suspend fun switchProfile(profileId: Long): Result<Unit>
     suspend fun logout()
+    suspend fun deleteProfile(profileId: Long)
 }

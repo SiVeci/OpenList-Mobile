@@ -49,6 +49,13 @@ class AuthRepositoryImpl @Inject constructor(
         tokenManager.currentToken = null
         tokenManager.currentServerUrl = null
     }
+    
+    override suspend fun deleteProfile(profileId: Long) = withContext(Dispatchers.IO) {
+        dao.deleteProfileById(profileId)
+        if (tokenManager.currentProfileId == profileId) {
+            logout()
+        }
+    }
 
     override suspend fun loginAndSave(aliasName: String, serverUrl: String, username: String, password: String): Result<String> = withContext(Dispatchers.IO) {
         try {
@@ -61,18 +68,29 @@ class AuthRepositoryImpl @Inject constructor(
             val response = apiService.login(url, LoginRequest(username, password))
             if (response.code == 200 && response.data != null) {
                 val token = response.data.token
+                val encryptedToken = keystoreManager.encrypt(token)
                 
                 dao.clearActiveProfiles()
                 
-                val encryptedToken = keystoreManager.encrypt(token)
-                val profile = ServerProfile(
-                    aliasName = aliasName,
-                    serverUrl = baseUrl,
-                    username = username,
-                    encryptedToken = encryptedToken,
-                    isActive = true
-                )
-                val profileId = dao.insert(profile)
+                val existingProfile = dao.getProfileByUrlAndUser(baseUrl, username)
+                val profileId = if (existingProfile != null) {
+                    val updatedProfile = existingProfile.copy(
+                        aliasName = aliasName,
+                        encryptedToken = encryptedToken,
+                        isActive = true
+                    )
+                    dao.update(updatedProfile)
+                    updatedProfile.id
+                } else {
+                    val newProfile = ServerProfile(
+                        aliasName = aliasName,
+                        serverUrl = baseUrl,
+                        username = username,
+                        encryptedToken = encryptedToken,
+                        isActive = true
+                    )
+                    dao.insert(newProfile)
+                }
                 
                 tokenManager.currentProfileId = profileId
                 tokenManager.currentToken = token

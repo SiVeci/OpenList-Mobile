@@ -9,7 +9,10 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Label
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -162,9 +165,24 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                         onDismissRequest = { historyExpanded = false }
                     ) {
                         uiState.profiles.forEach { profile ->
+                            val title = if (profile.aliasName.isNotBlank()) profile.aliasName else profile.username
+                            val subtitle = profile.serverUrl
+                            
                             DropdownMenuItem(
                                 text = { 
-                                    Text(if (profile.aliasName.isNotBlank()) profile.aliasName else profile.serverUrl) 
+                                    Column {
+                                        Text(
+                                            text = title,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            color = Color(0xFF1E293B)
+                                        )
+                                        Text(
+                                            text = subtitle,
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF94A3B8)
+                                        )
+                                    }
                                 },
                                 onClick = {
                                     historyExpanded = false
@@ -178,6 +196,18 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                                         port = if (url.port != -1) url.port.toString() else if (isHttps) "443" else "80"
                                     } catch (e: Exception) {
                                         host = profile.serverUrl.replace("https://", "").replace("http://", "")
+                                    }
+                                },
+                                trailingIcon = {
+                                    IconButton(
+                                        onClick = { viewModel.deleteProfile(profile) }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Delete,
+                                            contentDescription = "Delete",
+                                            tint = Color(0xFFCBD5E1),
+                                            modifier = Modifier.size(20.dp)
+                                        )
                                     }
                                 }
                             )
