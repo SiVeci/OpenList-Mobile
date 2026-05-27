@@ -60,7 +60,8 @@ data class HomeUiState(
     val isPreviewingTextLoading: Boolean = false,
 
     val isSelectionMode: Boolean = false,
-    val selectedFiles: Set<AListFile> = emptySet()
+    val selectedFiles: Set<AListFile> = emptySet(),
+    val isGridView: Boolean = false
 )
 
 @HiltViewModel
@@ -264,6 +265,33 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(isSelectionMode = false, selectedFiles = emptySet()) }
     }
 
+    fun toggleViewMode() {
+        _uiState.update { it.copy(isGridView = !_uiState.value.isGridView) }
+    }
+
+    fun batchDeleteSelected() {
+        val selected = _uiState.value.selectedFiles.toList()
+        if (selected.isEmpty()) return
+        
+        viewModelScope.launch {
+            val names = selected.map { it.name }
+            fileRepository.remove(_uiState.value.currentPath, names).onSuccess {
+                clearSelection()
+                refresh()
+            }
+        }
+    }
+
+    fun batchDownloadSelected(context: android.content.Context) {
+        val selected = _uiState.value.selectedFiles.filter { !it.is_dir }
+        if (selected.isEmpty()) return
+
+        selected.forEach { file ->
+            startDownload(context, file)
+        }
+        clearSelection()
+    }
+
     // --- Phase 5: CRUD Operations ---
 
     fun createFolder(folderName: String) {
@@ -398,6 +426,15 @@ class HomeViewModel @Inject constructor(
         val state = _uiState.value
         var filtered = state.rawFiles
 
+        // 1. Search Filter (contains query in name)
+        if (state.filterSuffix.isNotBlank()) {
+            val query = state.filterSuffix.trim().lowercase()
+            filtered = filtered.filter { 
+                it.name.lowercase().contains(query)
+            }
+        }
+
+        // 2. Category Filter
         if (state.filterCategory != FilterCategory.All) {
             filtered = filtered.filter { file ->
                 if (file.is_dir) return@filter false
@@ -410,13 +447,6 @@ class HomeViewModel @Inject constructor(
                     FilterCategory.Other -> ext !in listOf("mp4", "mkv", "avi", "mov", "flv", "webm", "jpg", "jpeg", "png", "gif", "webp", "bmp", "mp3", "flac", "wav", "ogg", "m4a", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "md")
                     else -> true
                 }
-            }
-        }
-
-        if (state.filterSuffix.isNotBlank()) {
-            val s = state.filterSuffix.trim().removePrefix(".").lowercase()
-            filtered = filtered.filter { 
-                it.name.lowercase().endsWith(".$s") || (it.is_dir && state.filterCategory == FilterCategory.All)
             }
         }
 
@@ -439,7 +469,6 @@ class HomeViewModel @Inject constructor(
 
         _uiState.update { it.copy(files = sorted) }
     }
-
     fun testLoginAndFetch(aliasName: String, serverUrl: String, user: String, pass: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }

@@ -53,6 +53,10 @@ import com.example.alist.data.remote.model.AListFile
 import com.example.alist.ui.components.*
 import java.net.URLEncoder
 
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.platform.LocalFocusManager
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -61,6 +65,7 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
 
     var showMkdirDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<AListFile?>(null) }
@@ -80,6 +85,11 @@ fun HomeScreen(
     }
 
     Scaffold(
+        modifier = Modifier.pointerInput(Unit) {
+            detectTapGestures(onTap = {
+                focusManager.clearFocus()
+            })
+        },
         topBar = {
             if (uiState.currentProfile != null) {
                 HomeTopBar(
@@ -196,7 +206,7 @@ fun HomeScreen(
                             )
                             
                             IconButton(
-                                onClick = { /* TODO: Batch Download */ },
+                                onClick = { viewModel.batchDownloadSelected(context) },
                                 enabled = uiState.selectedFiles.none { it.is_dir }
                             ) {
                                 Icon(
@@ -212,7 +222,7 @@ fun HomeScreen(
                             }
                             IconButton(
                                 onClick = { 
-                                    // TODO: Batch Delete
+                                    viewModel.batchDeleteSelected()
                                 },
                                 modifier = Modifier
                                     .clip(CircleShape)
@@ -375,6 +385,9 @@ fun FileBrowserView(
 
     Column(modifier = Modifier.fillMaxSize()) {
         // --- Search Bar ---
+        var showSortMenu by remember { mutableStateOf(false) }
+        var showFilterMenu by remember { mutableStateOf(false) }
+
         HomeSearchBar(
             query = uiState.filterSuffix,
             onQueryChange = { viewModel.updateFilterSuffix(it) },
@@ -384,21 +397,50 @@ fun FileBrowserView(
                 if (uiState.selectedFiles.size == uiState.files.size) viewModel.clearSelection()
                 else viewModel.selectAll()
             },
-            onFilterClick = { /* TODO */ },
-            onSortClick = { /* TODO */ },
-            isGridView = false,
-            onToggleView = { }
+            onFilterClick = { showFilterMenu = true },
+            onSortClick = { showSortMenu = true },
+            isGridView = uiState.isGridView,
+            onToggleView = { viewModel.toggleViewMode() }
         )
+
+        Box {
+            DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+                DropdownMenuItem(
+                    text = { Text("Name ${if (uiState.sortBy == SortBy.Name) "✓" else ""}") },
+                    onClick = { viewModel.updateSortBy(SortBy.Name); showSortMenu = false }
+                )
+                DropdownMenuItem(
+                    text = { Text("Size ${if (uiState.sortBy == SortBy.Size) "✓" else ""}") },
+                    onClick = { viewModel.updateSortBy(SortBy.Size); showSortMenu = false }
+                )
+                DropdownMenuItem(
+                    text = { Text("Time ${if (uiState.sortBy == SortBy.Time) "✓" else ""}") },
+                    onClick = { viewModel.updateSortBy(SortBy.Time); showSortMenu = false }
+                )
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text(if (uiState.sortOrder == SortOrder.Asc) "Ascending" else "Descending") },
+                    onClick = { 
+                        viewModel.updateSortOrder(if (uiState.sortOrder == SortOrder.Asc) SortOrder.Desc else SortOrder.Asc)
+                        showSortMenu = false 
+                    }
+                )
+            }
+            DropdownMenu(expanded = showFilterMenu, onDismissRequest = { showFilterMenu = false }) {
+                FilterCategory.values().forEach { cat ->
+                    DropdownMenuItem(
+                        text = { Text("${cat.label} ${if (uiState.filterCategory == cat) "✓" else ""}") },
+                        onClick = { viewModel.updateFilterCategory(cat); showFilterMenu = false }
+                    )
+                }
+            }
+        }
 
         // --- Breadcrumbs ---
         BreadcrumbNavigation(
             path = uiState.currentPath,
             onPathClick = { path ->
-                if (path == "/") {
-                    viewModel.fetchFiles("/")
-                } else {
-                    viewModel.fetchFiles(path)
-                }
+                viewModel.fetchFiles(path)
             }
         )
 
@@ -438,34 +480,58 @@ fun FileBrowserView(
                     )
                 }
                 else -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp)
-                    ) {
-                        items(uiState.files, key = { it.name + it.modified }) { file ->
-                            val isSelected = uiState.selectedFiles.contains(file)
-                            FileItemCard(
-                                file = file,
-                                isSelected = isSelected,
-                                isSelectionMode = uiState.isSelectionMode,
-                                onClick = {
-                                    if (uiState.isSelectionMode) {
-                                        viewModel.toggleFileSelection(file)
-                                    } else {
-                                        handleFileClick(file, viewModel, context, onImagePreview = onImagePreview)
+                    if (uiState.isGridView) {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(120.dp),
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp, start = 12.dp, end = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(uiState.files, key = { it.name + it.modified }) { file ->
+                                val isSelected = uiState.selectedFiles.contains(file)
+                                // Note: FileGridItem is currently a legacy component, we should ideally reuse FileItemCard or update FileGridItem for selection
+                                FileGridItem(
+                                    file = file,
+                                    viewModel = viewModel,
+                                    context = context,
+                                    onRenameRequest = { /* TODO */ },
+                                    onDeleteRequest = { /* TODO */ },
+                                    onImagePreview = onImagePreview
+                                )
+                                // Add click handling logic for Grid if needed, but for now we focus on List as per screenshot
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp)
+                        ) {
+                            items(uiState.files, key = { it.name + it.modified }) { file ->
+                                val isSelected = uiState.selectedFiles.contains(file)
+                                FileItemCard(
+                                    file = file,
+                                    isSelected = isSelected,
+                                    isSelectionMode = uiState.isSelectionMode,
+                                    onClick = {
+                                        if (uiState.isSelectionMode) {
+                                            viewModel.toggleFileSelection(file)
+                                        } else {
+                                            handleFileClick(file, viewModel, context, onImagePreview = onImagePreview)
+                                        }
+                                    },
+                                    onLongClick = {
+                                        if (!uiState.isSelectionMode) {
+                                            viewModel.toggleSelectionMode(true)
+                                            viewModel.toggleFileSelection(file)
+                                        }
                                     }
-                                },
-                                onLongClick = {
-                                    if (!uiState.isSelectionMode) {
-                                        viewModel.toggleSelectionMode(true)
-                                        viewModel.toggleFileSelection(file)
-                                    }
-                                }
-                            )
+                                )
 
-                            if (file == uiState.files.last() && uiState.hasMore) {
-                                LaunchedEffect(Unit) {
-                                    viewModel.loadMore()
+                                if (file == uiState.files.last() && uiState.hasMore) {
+                                    LaunchedEffect(Unit) {
+                                        viewModel.loadMore()
+                                    }
                                 }
                             }
                         }
