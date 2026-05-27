@@ -82,11 +82,15 @@ class HomeViewModel @Inject constructor(
             authRepository.initActiveProfile()
             authRepository.getAllProfiles().collect { profiles ->
                 val active = profiles.find { it.isActive }
+                val previousProfileId = _uiState.value.currentProfile?.id
+                
                 _uiState.update { it.copy(
                     profiles = profiles,
                     currentProfile = active
                 ) }
-                if (active != null && _uiState.value.rawFiles.isEmpty() && !_uiState.value.isLoading) {
+                
+                // Trigger fetch if a profile becomes active or changes, and we don't have files yet
+                if (active != null && (active.id != previousProfileId || _uiState.value.rawFiles.isEmpty())) {
                     fetchFiles("/", isRefresh = false)
                 }
             }
@@ -445,6 +449,9 @@ class HomeViewModel @Inject constructor(
                     isLoading = false,
                     error = loginResult.exceptionOrNull()?.message ?: "Login failed"
                 ) }
+            } else {
+                // Success: Ensure we load files immediately
+                fetchFiles("/", isRefresh = false)
             }
         }
     }
