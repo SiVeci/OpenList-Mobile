@@ -208,9 +208,24 @@ class TransferService : Service() {
             val encodedPath = java.net.URLEncoder.encode(targetPath, "UTF-8").replace("+", "%20")
             val url = "$baseUrl/api/fs/put"
 
+            // Fix for Content-Length: If totalBytes is invalid, try to get actual size
+            var actualTotalBytes = task.totalBytes
+            if (actualTotalBytes <= 0) {
+                try {
+                    actualTotalBytes = contentResolver.openAssetFileDescriptor(uri, "r")?.length ?: inputStream.available().toLong()
+                    // Update task with correct size
+                    if (actualTotalBytes > 0) {
+                        task = task.copy(totalBytes = actualTotalBytes)
+                        transferTaskDao.update(task)
+                    }
+                } catch (e: Exception) {
+                    // Ignore, fallback to original size
+                }
+            }
+
             val requestBody = ProgressRequestBody(
                 inputStream = inputStream,
-                contentLength = task.totalBytes,
+                contentLength = actualTotalBytes,
                 onProgress = { bytesWritten ->
                     if (!serviceScope.isActive) return@ProgressRequestBody
                     serviceScope.launch {
@@ -223,7 +238,7 @@ class TransferService : Service() {
 
             val request = Request.Builder()
                 .url(url)
-                .addHeader("Authorization", token)
+                // Removed duplicate Authorization header, as NetworkModule already provides an interceptor
                 .addHeader("File-Path", encodedPath)
                 .put(requestBody)
                 .build()
