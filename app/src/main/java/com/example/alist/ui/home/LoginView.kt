@@ -282,12 +282,12 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // HTTP/HTTPS Toggle
+                    // HTTP/HTTPS Toggle (weight 0.8 to make it compact)
                     Row(
                         modifier = Modifier
-                            .weight(1f)
+                            .weight(0.8f)
                             .height(48.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(inputBackgroundColor)
@@ -307,7 +307,7 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                         ) {
                             Text(
                                 "HTTP", 
-                                fontSize = 13.sp, 
+                                fontSize = 12.sp, 
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (!isHttps) primaryColor else Color(0xFF94A3B8)
                             )
@@ -327,63 +327,71 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                         ) {
                             Text(
                                 "HTTPS", 
-                                fontSize = 13.sp, 
+                                fontSize = 12.sp, 
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (isHttps) primaryColor else Color(0xFF94A3B8)
                             )
                         }
                     }
                     
-                    // Port
+                    // Host (weight 1.5 to give it the most space)
                     Row(
                         modifier = Modifier
-                            .weight(0.8f)
+                            .weight(1.5f)
                             .height(48.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(inputBackgroundColor)
-                            .padding(horizontal = 12.dp),
+                            .padding(horizontal = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("#", color = Color(0xFFCBD5E1), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.Default.Language,
+                            contentDescription = "Host",
+                            tint = Color(0xFFCBD5E1),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            if (host.isEmpty()) {
+                                Text(
+                                    text = "Domain/IP",
+                                    color = Color(0xFF94A3B8),
+                                    fontSize = 14.sp
+                                )
+                            }
+                            BasicTextField(
+                                value = host,
+                                onValueChange = { host = it },
+                                textStyle = TextStyle(fontSize = 14.sp, color = Color(0xFF334155), fontWeight = FontWeight.Medium),
+                                singleLine = true,
+                                cursorBrush = SolidColor(primaryColor),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                    
+                    // Port (weight 0.6 to fit max 5 digits like 18443)
+                    Row(
+                        modifier = Modifier
+                            .weight(0.6f)
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(inputBackgroundColor)
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("#", color = Color(0xFFCBD5E1), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Spacer(modifier = Modifier.width(4.dp))
                         BasicTextField(
                             value = port,
                             onValueChange = { port = it },
-                            textStyle = TextStyle(fontSize = 15.sp, color = Color(0xFF334155), fontWeight = FontWeight.Medium),
+                            textStyle = TextStyle(fontSize = 14.sp, color = Color(0xFF334155), fontWeight = FontWeight.Medium),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
-                            cursorBrush = SolidColor(primaryColor)
+                            cursorBrush = SolidColor(primaryColor),
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
-                }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                // Host
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(inputBackgroundColor)
-                        .padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Language,
-                        contentDescription = "Host",
-                        tint = Color(0xFFCBD5E1),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    BasicTextField(
-                        value = host,
-                        onValueChange = { host = it },
-                        textStyle = TextStyle(fontSize = 15.sp, color = Color(0xFF334155), fontWeight = FontWeight.Medium),
-                        singleLine = true,
-                        cursorBrush = SolidColor(primaryColor),
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
             }
         }
