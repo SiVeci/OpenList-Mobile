@@ -47,9 +47,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
-
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+...
 @Composable
 fun HomeTopBar(
     title: String,
@@ -59,6 +60,7 @@ fun HomeTopBar(
 ) {
     Row(
         modifier = modifier
+            .statusBarsPadding()
             .fillMaxWidth()
             .height(64.dp)
             .padding(horizontal = 16.dp),
