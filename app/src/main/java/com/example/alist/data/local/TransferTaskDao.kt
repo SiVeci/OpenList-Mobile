@@ -24,6 +24,9 @@ interface TransferTaskDao {
     @Query("SELECT * FROM transfer_tasks WHERE id = :id")
     suspend fun getTaskById(id: Long): TransferTask?
 
+    @Query("SELECT * FROM transfer_tasks WHERE status = 'QUEUED' ORDER BY timestamp ASC LIMIT 1")
+    suspend fun getNextQueuedTask(): TransferTask?
+
     @Query("DELETE FROM transfer_tasks WHERE id = :id")
     suspend fun delete(id: Long)
 }

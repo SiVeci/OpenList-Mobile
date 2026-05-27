@@ -56,8 +56,8 @@ class DownloadService : Service() {
         when (action) {
             ACTION_START -> {
                 startForeground(NOTIFICATION_ID, createNotification("Starting download...", 0, 100))
-                if (taskId != -1L) {
-                    startDownload(taskId)
+                if (activeJob == null || activeJob?.isCompleted == true) {
+                    checkAndDownloadNext()
                 }
             }
             ACTION_PAUSE -> {
@@ -68,12 +68,13 @@ class DownloadService : Service() {
                         if (task != null) {
                             transferTaskDao.update(task.copy(status = TransferStatus.PAUSED))
                         }
+                        checkAndDownloadNext()
                     }
                 }
             }
             ACTION_RESUME -> {
-                if (taskId != -1L) {
-                    startDownload(taskId)
+                if (activeJob == null || activeJob?.isCompleted == true) {
+                    checkAndDownloadNext()
                 }
             }
             ACTION_CANCEL -> {
@@ -84,19 +85,43 @@ class DownloadService : Service() {
                         if (task != null) {
                             transferTaskDao.update(task.copy(status = TransferStatus.ERROR, errorMsg = "Cancelled"))
                         }
+                        checkAndDownloadNext()
                     }
+                } else {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
                 }
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
             }
         }
         return START_NOT_STICKY
+    }
+
+    private fun checkAndDownloadNext() {
+        activeJob?.cancel()
+        activeJob = serviceScope.launch {
+            val nextTask = transferTaskDao.getNextQueuedTask()
+            if (nextTask != null) {
+                startDownload(nextTask.id)
+            } else {
+                val activeTasks = transferTaskDao.getTasksByStatus(TransferStatus.DOWNLOADING)
+                if (activeTasks.isEmpty()) {
+                    delay(1000)
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
+            }
+        }
     }
 
     private fun startDownload(taskId: Long) {
         activeJob?.cancel()
         activeJob = serviceScope.launch {
             val task = transferTaskDao.getTaskById(taskId) ?: return@launch
+            if (task.status == TransferStatus.SUCCESS) {
+                checkAndDownloadNext()
+                return@launch
+            }
+            
             val downloadingTask = task.copy(status = TransferStatus.DOWNLOADING)
             transferTaskDao.update(downloadingTask)
 
@@ -106,13 +131,18 @@ class DownloadService : Service() {
 
                 val requestBuilder = Request.Builder().url(downloadingTask.fileUrl)
                 if (downloaded > 0) {
-                    requestBuilder.addHeader("Range", "bytes=-")
+                    requestBuilder.addHeader("Range", "bytes=$downloaded-")
                 }
 
                 val request = requestBuilder.build()
                 val response = okHttpClient.newCall(request).execute()
 
                 if (!response.isSuccessful) {
+                    if (response.code == 416) { // Requested Range Not Satisfiable - maybe already finished?
+                        transferTaskDao.update(task.copy(status = TransferStatus.SUCCESS))
+                        checkAndDownloadNext()
+                        return@launch
+                    }
                     throw Exception("HTTP ${response.code}")
                 }
 
@@ -139,7 +169,7 @@ class DownloadService : Service() {
                             if (now - lastUpdateTime > 500) {
                                 lastUpdateTime = now
                                 transferTaskDao.update(currentTask)
-                                updateNotification(currentTask.fileName, currentTask.downloadedBytes, currentTask.totalBytes)
+                                updateNotification("Downloading: ${currentTask.fileName}", currentTask.downloadedBytes, currentTask.totalBytes)
                             }
                         }
                     }
@@ -147,18 +177,16 @@ class DownloadService : Service() {
 
                 transferTaskDao.update(currentTask.copy(status = TransferStatus.SUCCESS))
                 updateNotification("Download complete: ${currentTask.fileName}", 100, 100)
-                delay(2000)
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                delay(1000)
+                checkAndDownloadNext()
 
             } catch (e: CancellationException) {
-                // Handled in actions
+                // Task was paused or cancelled
             } catch (e: Exception) {
                 transferTaskDao.update(task.copy(status = TransferStatus.ERROR, errorMsg = e.message))
                 updateNotification("Download failed: ${task.fileName}", 0, 100)
-                delay(2000)
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                delay(1000)
+                checkAndDownloadNext()
             }
         }
     }
