@@ -120,31 +120,37 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
             )
             Spacer(modifier = Modifier.height(8.dp))
             
-            ExposedDropdownMenuBox(
-                expanded = historyExpanded,
-                onExpandedChange = { historyExpanded = it }
-            ) {
-                // We wrap CustomTextField inside the menu box
-                Box(modifier = Modifier.menuAnchor()) {
-                    CustomTextField(
-                        value = aliasName,
-                        onValueChange = { aliasName = it },
-                        icon = Icons.Outlined.Label,
-                        placeholder = "Alias Name (e.g. NAS)",
-                        trailingIcon = {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                CustomTextField(
+                    value = aliasName,
+                    onValueChange = { aliasName = it },
+                    icon = Icons.Outlined.Label,
+                    placeholder = "Alias Name (e.g. NAS)",
+                    trailingIcon = {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .clickable { 
+                                    focusManager.clearFocus()
+                                    historyExpanded = !historyExpanded 
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.KeyboardArrowDown,
                                 contentDescription = "Expand history",
                                 tint = Color(0xFF94A3B8),
-                                modifier = Modifier.size(18.dp).clickable { historyExpanded = !historyExpanded }
+                                modifier = Modifier.size(18.dp)
                             )
                         }
-                    )
-                }
+                    }
+                )
 
-                ExposedDropdownMenu(
+                DropdownMenu(
                     expanded = historyExpanded,
-                    onDismissRequest = { historyExpanded = false }
+                    onDismissRequest = { historyExpanded = false },
+                    modifier = Modifier.fillMaxWidth(0.85f).background(Color.White)
                 ) {
                     if (uiState.profiles.isEmpty()) {
                         DropdownMenuItem(
