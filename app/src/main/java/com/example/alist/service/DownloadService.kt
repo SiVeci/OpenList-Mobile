@@ -96,10 +96,8 @@ class DownloadService : Service() {
                 while (isActive) {
                     val nextTask = transferTaskDao.getNextQueuedTask()
                     if (nextTask == null) {
-                        // No more tasks in queue
                         break
                     }
-                    // Process the task synchronously within this coroutine
                     downloadFile(nextTask.id)
                 }
             } finally {
@@ -152,7 +150,7 @@ class DownloadService : Service() {
                     var lastUpdateTime = System.currentTimeMillis()
 
                     while (input.read(buffer).also { bytesRead = it } != -1) {
-                        if (!coroutineContext.isActive) throw CancellationException()
+                        if (!currentCoroutineContext().isActive) throw CancellationException()
 
                         output.write(buffer, 0, bytesRead)
                         currentTask = currentTask.copy(downloadedBytes = currentTask.downloadedBytes + bytesRead)
@@ -172,7 +170,7 @@ class DownloadService : Service() {
             delay(1000)
 
         } catch (e: CancellationException) {
-            // Task was paused or cancelled by user
+            // Task was paused or cancelled
         } catch (e: Exception) {
             transferTaskDao.update(task.copy(status = TransferStatus.ERROR, errorMsg = e.message))
             updateNotification("Download failed: ${task.fileName}", 0, 100)
