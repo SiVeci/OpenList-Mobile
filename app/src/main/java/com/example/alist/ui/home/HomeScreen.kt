@@ -72,81 +72,83 @@ fun HomeScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = uiState.currentProfile?.serverUrl ?: "OpenList",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        if (uiState.currentPath != "/") {
+            if (uiState.currentProfile != null) {
+                TopAppBar(
+                    title = {
+                        Column {
                             Text(
-                                text = uiState.currentPath,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                text = uiState.currentProfile?.serverUrl ?: "OpenList",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
+                            if (uiState.currentPath != "/") {
+                                Text(
+                                    text = uiState.currentPath,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                )
+                            }
                         }
-                    }
-                },
-                navigationIcon = {
-                    if (uiState.currentPath != "/") {
-                        IconButton(onClick = { viewModel.navigateBack() }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    },
+                    navigationIcon = {
+                        if (uiState.currentPath != "/") {
+                            IconButton(onClick = { viewModel.navigateBack() }) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                            }
                         }
-                    }
-                },
-                actions = {
-                    if (uiState.profiles.isNotEmpty()) {
-                        IconButton(onClick = onNavigateToTransfer) {
-                            Icon(Icons.Default.Download, contentDescription = "Transfer Manager")
-                        }
-                        var expanded by remember { mutableStateOf(false) }
-                        IconButton(onClick = { expanded = true }) {
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = "Switch Server")
-                        }
-                        DropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            uiState.profiles.forEach { profile ->
+                    },
+                    actions = {
+                        if (uiState.profiles.isNotEmpty()) {
+                            IconButton(onClick = onNavigateToTransfer) {
+                                Icon(Icons.Default.Download, contentDescription = "Transfer Manager")
+                            }
+                            var expanded by remember { mutableStateOf(false) }
+                            IconButton(onClick = { expanded = true }) {
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = "Switch Server")
+                            }
+                            DropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false }
+                            ) {
+                                uiState.profiles.forEach { profile ->
+                                    DropdownMenuItem(
+                                        text = { 
+                                            Text(if (profile.aliasName.isNotBlank()) profile.aliasName else profile.serverUrl) 
+                                        },
+                                        onClick = {
+                                            viewModel.switchProfile(profile)
+                                            expanded = false
+                                        },
+                                        leadingIcon = {
+                                            if (profile.id == uiState.currentProfile?.id) {
+                                                Text("✓", color = MaterialTheme.colorScheme.primary)
+                                            }
+                                        }
+                                    )
+                                }
+                                HorizontalDivider()
                                 DropdownMenuItem(
-                                    text = { 
-                                        Text(if (profile.aliasName.isNotBlank()) profile.aliasName else profile.serverUrl) 
-                                    },
+                                    text = { Text("Logout", color = MaterialTheme.colorScheme.error) },
                                     onClick = {
-                                        viewModel.switchProfile(profile)
+                                        viewModel.logout()
                                         expanded = false
                                     },
                                     leadingIcon = {
-                                        if (profile.id == uiState.currentProfile?.id) {
-                                            Text("✓", color = MaterialTheme.colorScheme.primary)
-                                        }
+                                        Icon(
+                                            Icons.Default.Logout,
+                                            contentDescription = "Logout",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
                                     }
                                 )
                             }
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("Logout", color = MaterialTheme.colorScheme.error) },
-                                onClick = {
-                                    viewModel.logout()
-                                    expanded = false
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Default.Logout,
-                                        contentDescription = "Logout",
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                            )
                         }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background
+                    )
                 )
-            )
+            }
         },
         floatingActionButton = {
             if (uiState.profiles.isNotEmpty() && uiState.currentProfile != null) {
@@ -197,7 +199,7 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (uiState.profiles.isEmpty()) {
+            if (uiState.currentProfile == null) {
                 LoginView(viewModel, uiState)
             } else {
                 FileBrowserView(
