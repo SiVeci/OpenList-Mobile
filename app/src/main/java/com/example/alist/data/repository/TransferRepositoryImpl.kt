@@ -3,6 +3,7 @@ package com.example.alist.data.repository
 import com.example.alist.data.local.TransferStatus
 import com.example.alist.data.local.TransferTask
 import com.example.alist.data.local.TransferTaskDao
+import com.example.alist.data.local.TransferType
 import com.example.alist.domain.repository.TransferRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -15,14 +16,15 @@ class TransferRepositoryImpl @Inject constructor(
 
     override fun getAllTasks(): Flow<List<TransferTask>> = dao.getAllTasksFlow()
 
-    override suspend fun addTask(fileName: String, fileUrl: String, savePath: String): Long = withContext(Dispatchers.IO) {
+    override suspend fun addTask(fileName: String, fileUrl: String, savePath: String, totalBytes: Long, type: TransferType): Long = withContext(Dispatchers.IO) {
         val task = TransferTask(
             fileName = fileName,
             fileUrl = fileUrl,
             savePath = savePath,
-            totalBytes = 0,
+            totalBytes = totalBytes,
             downloadedBytes = 0,
-            status = TransferStatus.PENDING
+            status = TransferStatus.PENDING,
+            type = type
         )
         dao.insert(task)
     }

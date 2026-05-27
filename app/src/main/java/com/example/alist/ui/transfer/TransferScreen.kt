@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.alist.data.local.TransferStatus
 import com.example.alist.data.local.TransferTask
+import com.example.alist.data.local.TransferType
 import com.example.alist.ui.components.EmptyState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -108,7 +109,7 @@ fun TransferScreen(
                         1 -> "还没有完成的任务"
                         else -> "没有失败的任务"
                     },
-                    subtitle = if (selectedTabIndex == 0) "在文件列表中点击下载即可开始" else "",
+                    subtitle = if (selectedTabIndex == 0) "在文件列表中点击下载/上传即可开始" else "",
                     modifier = Modifier.fillMaxSize().wrapContentSize(Alignment.Center)
                 )
             } else {
@@ -147,7 +148,7 @@ fun TransferTaskCard(
 
     val statusConfig = when (task.status) {
         TransferStatus.DOWNLOADING -> StatusConfig(
-            label = "下载中",
+            label = if (task.type == TransferType.UPLOAD) "上传中" else "下载中",
             badgeColor = MaterialTheme.colorScheme.primary,
             progressColor = MaterialTheme.colorScheme.primary
         )

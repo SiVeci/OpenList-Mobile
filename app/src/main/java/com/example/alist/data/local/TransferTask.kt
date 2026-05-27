@@ -7,6 +7,10 @@ enum class TransferStatus {
     PENDING, DOWNLOADING, PAUSED, SUCCESS, ERROR
 }
 
+enum class TransferType {
+    DOWNLOAD, UPLOAD
+}
+
 @Entity(tableName = "transfer_tasks")
 data class TransferTask(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -17,5 +21,6 @@ data class TransferTask(
     val downloadedBytes: Long,
     val status: TransferStatus,
     val errorMsg: String? = null,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val type: TransferType = TransferType.DOWNLOAD
 )

@@ -10,7 +10,8 @@ import com.example.alist.data.remote.model.AListFile
 import com.example.alist.domain.repository.AuthRepository
 import com.example.alist.domain.repository.FileRepository
 import com.example.alist.domain.repository.TransferRepository
-import com.example.alist.service.DownloadService
+import com.example.alist.service.TransferService
+import com.example.alist.data.local.TransferType
 import com.example.alist.utils.ShareManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -339,7 +340,6 @@ class HomeViewModel @Inject constructor(
     fun uploadSharedFiles(context: Context, uris: List<android.net.Uri>) {
         val currentPath = _uiState.value.currentPath
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 for (uri in uris) {
                     val contentResolver = context.contentResolver
@@ -354,13 +354,29 @@ class HomeViewModel @Inject constructor(
                         cursor.close()
                     }
 
-                    val inputStream = contentResolver.openInputStream(uri) ?: continue
-                    fileRepository.uploadFile(currentPath, fileName, inputStream, fileSize)
+                    // Insert task to DB
+                    val taskId = transferRepository.addTask(
+                        fileName = fileName,
+                        fileUrl = currentPath, // target remote path
+                        savePath = uri.toString(), // local file uri
+                        totalBytes = fileSize,
+                        type = TransferType.UPLOAD
+                    )
+                    
+                    // Start TransferService
+                    val intent = Intent(context, TransferService::class.java).apply {
+                        action = TransferService.ACTION_START
+                        putExtra(TransferService.EXTRA_TASK_ID, taskId)
+                    }
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                        context.startForegroundService(intent)
+                    } else {
+                        context.startService(intent)
+                    }
                 }
                 shareManager.clearSharedUris()
-                refresh()
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = e.message) }
+                _uiState.update { it.copy(error = e.message) }
             }
         }
     }
@@ -387,9 +403,9 @@ class HomeViewModel @Inject constructor(
             val savePath = "$saveDir/${file.name}"
             val taskId = transferRepository.addTask(file.name, url, savePath)
             
-            val intent = Intent(context, DownloadService::class.java).apply {
-                action = DownloadService.ACTION_START
-                putExtra(DownloadService.EXTRA_TASK_ID, taskId)
+            val intent = Intent(context, TransferService::class.java).apply {
+                action = TransferService.ACTION_START
+                putExtra(TransferService.EXTRA_TASK_ID, taskId)
             }
             context.startForegroundService(intent)
         }

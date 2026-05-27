@@ -7,7 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.alist.data.local.TransferStatus
 import com.example.alist.data.local.TransferTask
 import com.example.alist.domain.repository.TransferRepository
-import com.example.alist.service.DownloadService
+import com.example.alist.service.TransferService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.SharingStarted
@@ -36,25 +36,25 @@ class TransferViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun pauseTask(task: TransferTask) {
-        val intent = Intent(context, DownloadService::class.java).apply {
-            action = DownloadService.ACTION_PAUSE
-            putExtra(DownloadService.EXTRA_TASK_ID, task.id)
+        val intent = Intent(context, TransferService::class.java).apply {
+            action = TransferService.ACTION_PAUSE
+            putExtra(TransferService.EXTRA_TASK_ID, task.id)
         }
         context.startService(intent)
     }
 
     fun resumeTask(task: TransferTask) {
-        val intent = Intent(context, DownloadService::class.java).apply {
-            action = DownloadService.ACTION_RESUME
-            putExtra(DownloadService.EXTRA_TASK_ID, task.id)
+        val intent = Intent(context, TransferService::class.java).apply {
+            action = TransferService.ACTION_RESUME
+            putExtra(TransferService.EXTRA_TASK_ID, task.id)
         }
         context.startService(intent)
     }
 
     fun cancelTask(task: TransferTask) {
-        val intent = Intent(context, DownloadService::class.java).apply {
-            action = DownloadService.ACTION_CANCEL
-            putExtra(DownloadService.EXTRA_TASK_ID, task.id)
+        val intent = Intent(context, TransferService::class.java).apply {
+            action = TransferService.ACTION_CANCEL
+            putExtra(TransferService.EXTRA_TASK_ID, task.id)
         }
         context.startService(intent)
     }

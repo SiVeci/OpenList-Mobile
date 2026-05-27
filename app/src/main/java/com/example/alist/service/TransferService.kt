@@ -7,22 +7,27 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.example.alist.MainActivity
 import com.example.alist.data.local.TransferStatus
 import com.example.alist.data.local.TransferTaskDao
+import com.example.alist.data.local.TransferType
+import com.example.alist.data.remote.ProgressRequestBody
+import com.example.alist.utils.TokenManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import java.io.File
 import java.io.FileOutputStream
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class DownloadService : Service() {
+class TransferService : Service() {
 
     @Inject
     lateinit var transferTaskDao: TransferTaskDao
@@ -30,12 +35,15 @@ class DownloadService : Service() {
     @Inject
     lateinit var okHttpClient: OkHttpClient
 
+    @Inject
+    lateinit var tokenManager: TokenManager
+
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
     private var activeJob: Job? = null
     
     companion object {
-        const val CHANNEL_ID = "download_channel"
+        const val CHANNEL_ID = "transfer_channel"
         const val NOTIFICATION_ID = 1
         const val ACTION_START = "ACTION_START"
         const val ACTION_PAUSE = "ACTION_PAUSE"
@@ -57,7 +65,7 @@ class DownloadService : Service() {
 
         when (action) {
             ACTION_START, ACTION_RESUME -> {
-                startForeground(NOTIFICATION_ID, createNotification("Starting download...", 0, 100))
+                startForeground(NOTIFICATION_ID, createNotification("Starting transfer...", 0, 100))
                 startWorker()
             }
             ACTION_PAUSE -> {
@@ -98,7 +106,11 @@ class DownloadService : Service() {
                     if (nextTask == null) {
                         break
                     }
-                    downloadFile(nextTask.id)
+                    if (nextTask.type == TransferType.DOWNLOAD) {
+                        downloadFile(nextTask.id)
+                    } else {
+                        uploadFile(nextTask.id)
+                    }
                 }
             } finally {
                 isWorkerRunning = false
@@ -178,11 +190,70 @@ class DownloadService : Service() {
         }
     }
 
+    private suspend fun uploadFile(taskId: Long) {
+        var task = transferTaskDao.getTaskById(taskId) ?: return
+        
+        task = task.copy(status = TransferStatus.DOWNLOADING) // Reuse DOWNLOADING for active state
+        transferTaskDao.update(task)
+
+        try {
+            val uri = Uri.parse(task.savePath)
+            val inputStream = contentResolver.openInputStream(uri) ?: throw Exception("Could not open input stream")
+            
+            val baseUrl = tokenManager.currentServerUrl ?: throw Exception("No active server")
+            val token = tokenManager.currentToken ?: throw Exception("No token")
+            
+            // task.fileUrl here contains the target path
+            val encodedPath = java.net.URLEncoder.encode("${task.fileUrl}/${task.fileName}", "UTF-8").replace("+", "%20")
+            val url = "$baseUrl/api/fs/put"
+
+            val requestBody = ProgressRequestBody(
+                inputStream = inputStream,
+                contentLength = task.totalBytes,
+                onProgress = { bytesWritten ->
+                    if (!serviceScope.isActive) return@ProgressRequestBody
+                    serviceScope.launch {
+                        task = task.copy(downloadedBytes = bytesWritten)
+                        transferTaskDao.update(task)
+                        updateNotification("Uploading: ${task.fileName}", bytesWritten, task.totalBytes)
+                    }
+                }
+            )
+
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", token)
+                .addHeader("File-Path", encodedPath)
+                .addHeader("Content-Length", task.totalBytes.toString())
+                .put(requestBody)
+                .build()
+
+            val response = withContext(Dispatchers.IO) {
+                okHttpClient.newCall(request).execute()
+            }
+
+            if (!response.isSuccessful) {
+                throw Exception("HTTP ${response.code}: ${response.message}")
+            }
+
+            transferTaskDao.update(task.copy(status = TransferStatus.SUCCESS))
+            updateNotification("Upload complete: ${task.fileName}", 100, 100)
+            delay(1000)
+
+        } catch (e: CancellationException) {
+             // Task was cancelled
+        } catch (e: Exception) {
+            transferTaskDao.update(task.copy(status = TransferStatus.ERROR, errorMsg = e.message))
+            updateNotification("Upload failed: ${task.fileName}", 0, 100)
+            delay(1000)
+        }
+    }
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Download Channel",
+                "Transfer Channel",
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -197,7 +268,7 @@ class DownloadService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("OpenList Download")
+            .setContentTitle("OpenList Transfer")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setProgress(max.toInt(), progress.toInt(), max == 0L)
