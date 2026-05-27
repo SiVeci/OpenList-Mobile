@@ -38,6 +38,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import com.example.alist.data.local.ServerProfile
 import java.net.URL
 
@@ -52,6 +56,11 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
     var password by remember { mutableStateOf("") }
     
     var historyExpanded by remember { mutableStateOf(false) }
+    
+    val rotationAngle by animateFloatAsState(
+        targetValue = if (historyExpanded) 180f else 0f,
+        label = "arrowRotation"
+    )
     
     val focusManager = LocalFocusManager.current
 
@@ -141,77 +150,101 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                                 imageVector = Icons.Default.KeyboardArrowDown,
                                 contentDescription = "Expand history",
                                 tint = Color(0xFF94A3B8),
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .rotate(rotationAngle)
                             )
                         }
                     }
                 )
 
-                DropdownMenu(
-                    expanded = historyExpanded,
-                    onDismissRequest = { historyExpanded = false },
-                    modifier = Modifier.fillMaxWidth(0.85f).background(Color.White)
-                ) {
-                    if (uiState.profiles.isEmpty()) {
-                        DropdownMenuItem(
-                            text = { 
-                                Text(
-                                    text = "No saved servers",
-                                    fontSize = 14.sp,
-                                    color = Color(0xFF94A3B8)
-                                ) 
-                            },
-                            onClick = { historyExpanded = false },
-                            enabled = false
-                        )
-                    } else {
-                        uiState.profiles.forEach { profile ->
-                            val title = if (profile.aliasName.isNotBlank()) profile.aliasName else profile.username
-                            val subtitle = profile.serverUrl
-                            
-                            DropdownMenuItem(
-                                text = { 
-                                    Column {
+                if (historyExpanded) {
+                    Popup(
+                        onDismissRequest = { historyExpanded = false },
+                        properties = PopupProperties(focusable = true)
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp) // Margin from screen edges like the textfields
+                                .padding(top = 52.dp), // Position below the TextField
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color.White,
+                            shadowElevation = 8.dp
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp)
+                            ) {
+                                if (uiState.profiles.isEmpty()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 16.dp, horizontal = 20.dp),
+                                        contentAlignment = Alignment.CenterStart
+                                    ) {
                                         Text(
-                                            text = title,
-                                            fontWeight = FontWeight.Bold,
+                                            text = "No saved servers",
                                             fontSize = 14.sp,
-                                            color = Color(0xFF1E293B)
-                                        )
-                                        Text(
-                                            text = subtitle,
-                                            fontSize = 11.sp,
                                             color = Color(0xFF94A3B8)
                                         )
                                     }
-                                },
-                                onClick = {
-                                    historyExpanded = false
-                                    aliasName = profile.aliasName
-                                    username = profile.username
-                                    // Parse URL
-                                    try {
-                                        val url = URL(profile.serverUrl)
-                                        isHttps = url.protocol.equals("https", ignoreCase = true)
-                                        host = url.host
-                                        port = if (url.port != -1) url.port.toString() else if (isHttps) "443" else "80"
-                                    } catch (e: Exception) {
-                                        host = profile.serverUrl.replace("https://", "").replace("http://", "")
-                                    }
-                                },
-                                trailingIcon = {
-                                    IconButton(
-                                        onClick = { viewModel.deleteProfile(profile) }
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Delete,
-                                            contentDescription = "Delete",
-                                            tint = Color(0xFFCBD5E1),
-                                            modifier = Modifier.size(20.dp)
-                                        )
+                                } else {
+                                    uiState.profiles.forEach { profile ->
+                                        val title = if (profile.aliasName.isNotBlank()) profile.aliasName else profile.username
+                                        val subtitle = profile.serverUrl
+                                        
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    historyExpanded = false
+                                                    aliasName = profile.aliasName
+                                                    username = profile.username
+                                                    try {
+                                                        val url = URL(profile.serverUrl)
+                                                        isHttps = url.protocol.equals("https", ignoreCase = true)
+                                                        host = url.host
+                                                        port = if (url.port != -1) url.port.toString() else if (isHttps) "443" else "80"
+                                                    } catch (e: Exception) {
+                                                        host = profile.serverUrl.replace("https://", "").replace("http://", "")
+                                                    }
+                                                }
+                                                .padding(vertical = 12.dp, horizontal = 20.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = title,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 15.sp,
+                                                    color = Color(0xFF1E293B)
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = subtitle,
+                                                    fontSize = 12.sp,
+                                                    color = Color(0xFF94A3B8)
+                                                )
+                                            }
+                                            
+                                            IconButton(
+                                                onClick = { viewModel.deleteProfile(profile) },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Delete,
+                                                    contentDescription = "Delete",
+                                                    tint = Color(0xFFCBD5E1),
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
                                     }
                                 }
-                            )
+                            }
                         }
                     }
                 }
