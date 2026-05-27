@@ -3,6 +3,8 @@ package com.example.alist.ui.home
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -67,10 +69,17 @@ fun HomeScreen(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
 
-    var showMkdirDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<AListFile?>(null) }
     var deleteTarget by remember { mutableStateOf<AListFile?>(null) }
     var previewImageUrl by remember { mutableStateOf<String?>(null) }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.uploadSharedFiles(context, uris)
+        }
+    }
 
     BackHandler(enabled = uiState.currentPath != "/" || uiState.isSelectionMode || previewImageUrl != null || uiState.previewTextContent != null || uiState.isPreviewingTextLoading) {
         if (previewImageUrl != null) {
@@ -123,17 +132,17 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.size(56.dp))
                     }
 
-                    // Large Purple Add FAB
+                    // Large Purple Upload FAB
                     FloatingActionButton(
-                        onClick = { showMkdirDialog = true },
+                        onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = Color.White,
                         shape = CircleShape,
                         modifier = Modifier.size(72.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "New Folder",
+                            imageVector = Icons.Default.CloudUpload,
+                            contentDescription = "Upload File",
                             modifier = Modifier.size(32.dp)
                         )
                     }
@@ -257,32 +266,6 @@ fun HomeScreen(
     }
 
     // --- Dialogs ---
-    if (showMkdirDialog) {
-        var folderName by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { showMkdirDialog = false },
-            title = { Text("新建文件夹") },
-            text = {
-                OutlinedTextField(
-                    value = folderName,
-                    onValueChange = { folderName = it },
-                    label = { Text("文件夹名称") },
-                    singleLine = true
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (folderName.isNotBlank()) {
-                        viewModel.createFolder(folderName.trim())
-                    }
-                    showMkdirDialog = false
-                }) { Text("创建") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showMkdirDialog = false }) { Text("取消") }
-            }
-        )
-    }
 
     renameTarget?.let { file ->
         var newName by remember { mutableStateOf(file.name) }

@@ -7,14 +7,15 @@ import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.provider.DocumentsProvider
 import android.webkit.MimeTypeMap
+import com.example.alist.data.remote.AListApiService
+import com.example.alist.data.remote.model.FileListRequest
 import com.example.alist.domain.repository.AuthRepository
-import com.example.alist.domain.repository.FileRepository
 import com.example.alist.utils.TokenManager
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
-import kotlinx.coroutines.flow.firstOrNull
+
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -31,7 +32,7 @@ class AListDocumentsProvider : DocumentsProvider() {
     @InstallIn(SingletonComponent::class)
     interface ProviderEntryPoint {
         fun authRepository(): AuthRepository
-        fun fileRepository(): FileRepository
+        fun apiService(): AListApiService
         fun tokenManager(): TokenManager
         fun okHttpClient(): OkHttpClient
     }
@@ -124,28 +125,34 @@ class AListDocumentsProvider : DocumentsProvider() {
     ): Cursor {
         ensureInitialized()
         val matrixCursor = MatrixCursor(projection ?: defaultDocumentProjection)
-        
-        // Android 系统要求 DocumentsProvider 同步返回，我们这里通过 runBlocking 阻塞后台线程以获取网络数据
-        runBlocking {
-            val result = entryPoint.fileRepository().getFileListFlow(parentDocumentId, 1, 0, refresh = true).firstOrNull()
-            val files = result?.getOrNull()?.content ?: emptyList()
-            
-            for (file in files) {
-                // 构建完整的系统 ID 路径
-                val childId = if (parentDocumentId == "/") "/${file.name}" else "$parentDocumentId/${file.name}"
-                val mimeType = if (file.is_dir) DocumentsContract.Document.MIME_TYPE_DIR else getMimeType(file.name)
-                val flags = if (file.is_dir) DocumentsContract.Document.FLAG_DIR_SUPPORTS_CREATE else 0
-                
-                matrixCursor.newRow().apply {
-                    add(DocumentsContract.Document.COLUMN_DOCUMENT_ID, childId)
-                    add(DocumentsContract.Document.COLUMN_DISPLAY_NAME, file.name)
-                    add(DocumentsContract.Document.COLUMN_MIME_TYPE, mimeType)
-                    add(DocumentsContract.Document.COLUMN_SIZE, if (file.is_dir) null else file.size)
-                    add(DocumentsContract.Document.COLUMN_FLAGS, flags)
-                    // file.modified 通常是 ISO 字符串，这里简化处理，可结合 DateTime 格式化
-                    add(DocumentsContract.Document.COLUMN_LAST_MODIFIED, System.currentTimeMillis())
+
+        try {
+            runBlocking {
+                val baseUrl = entryPoint.tokenManager().currentServerUrl ?: return@runBlocking
+                val url = "$baseUrl/api/fs/list"
+                val request = FileListRequest(path = parentDocumentId, page = 1, per_page = 0, refresh = true)
+                val response = entryPoint.apiService().getFileList(url, request)
+
+                if (response.code == 200 && response.data != null) {
+                    val files = response.data.content ?: emptyList()
+                    for (file in files) {
+                        val childId = if (parentDocumentId == "/") "/${file.name}" else "$parentDocumentId/${file.name}"
+                        val mimeType = if (file.is_dir) DocumentsContract.Document.MIME_TYPE_DIR else getMimeType(file.name)
+                        val flags = if (file.is_dir) DocumentsContract.Document.FLAG_DIR_SUPPORTS_CREATE else 0
+
+                        matrixCursor.newRow().apply {
+                            add(DocumentsContract.Document.COLUMN_DOCUMENT_ID, childId)
+                            add(DocumentsContract.Document.COLUMN_DISPLAY_NAME, file.name)
+                            add(DocumentsContract.Document.COLUMN_MIME_TYPE, mimeType)
+                            add(DocumentsContract.Document.COLUMN_SIZE, if (file.is_dir) null else file.size)
+                            add(DocumentsContract.Document.COLUMN_FLAGS, flags)
+                            add(DocumentsContract.Document.COLUMN_LAST_MODIFIED, System.currentTimeMillis())
+                        }
+                    }
                 }
             }
+        } catch (e: Exception) {
+            // Return empty cursor on error to avoid crashing the system file manager
         }
         return matrixCursor
     }
