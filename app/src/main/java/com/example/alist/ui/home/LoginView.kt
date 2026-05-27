@@ -9,7 +9,13 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -195,7 +201,7 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
             CustomTextField(
                 value = aliasName,
                 onValueChange = { aliasName = it },
-                icon = Icons.Default.LabelOutline,
+                icon = Icons.Outlined.Label,
                 placeholder = "Alias Name (e.g. NAS)"
             )
         }
@@ -358,7 +364,7 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
         CustomTextField(
             value = username,
             onValueChange = { username = it },
-            icon = Icons.Default.PersonOutline,
+            icon = Icons.Outlined.Person,
             placeholder = "Username"
         )
         
@@ -368,7 +374,7 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
         CustomTextField(
             value = password,
             onValueChange = { password = it },
-            icon = Icons.Default.LockOutline,
+            icon = Icons.Outlined.Lock,
             placeholder = "Password",
             isPassword = true
         )
