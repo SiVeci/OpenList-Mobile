@@ -130,15 +130,16 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                     val displayText = if (currentProfile != null) {
                         if (currentProfile.aliasName.isNotBlank()) currentProfile.aliasName else currentProfile.serverUrl
                     } else {
-                        "Select a server..."
+                        ""
                     }
                     
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .height(44.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(Color.White)
-                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                            .padding(horizontal = 14.dp)
                             .menuAnchor(),
                         contentAlignment = Alignment.CenterStart
                     ) {
@@ -147,16 +148,25 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Current: $displayText",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFF334155)
-                            )
+                            if (currentProfile == null) {
+                                Text(
+                                    text = "Pick a saved server...",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF94A3B8)
+                                )
+                            } else {
+                                Text(
+                                    text = displayText,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF334155)
+                                )
+                            }
                             Icon(
                                 imageVector = Icons.Default.KeyboardArrowDown,
                                 contentDescription = "Expand",
-                                tint = Color(0xFF94A3B8)
+                                tint = Color(0xFF94A3B8),
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
