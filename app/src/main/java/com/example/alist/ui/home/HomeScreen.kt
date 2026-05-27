@@ -524,48 +524,6 @@ private fun handleFileClick(
     }
 }
 
-
-private fun handleFileClick(
-    file: AListFile,
-    viewModel: HomeViewModel,
-    context: android.content.Context,
-    onImagePreview: (String) -> Unit
-) {
-    if (file.is_dir) {
-        viewModel.navigateToFolder(file.name)
-        return
-    }
-
-    val ext = file.name.substringAfterLast('.').lowercase()
-    val isText = ext in listOf("txt", "json", "yaml", "yml", "xml", "js", "kt", "md", "ini", "conf", "sh", "bat", "log", "csv")
-    val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "flv", "webm")
-    val isImage = ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
-    val isDoc = ext in listOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx")
-
-    if (isText) {
-        viewModel.loadTextPreview(file)
-        return
-    }
-
-    val directLink = viewModel.generateDirectLink(file) ?: return
-
-    when {
-        isImage -> onImagePreview(directLink)
-        isVideo -> {
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(Uri.parse(directLink), "video/*")
-            }
-            context.startActivity(Intent.createChooser(intent, "选择播放器"))
-        }
-        isDoc -> {
-            val encodedUrl = URLEncoder.encode(directLink, "UTF-8")
-            val previewUrl = "https://view.officeapps.live.com/op/view.aspx?src=$encodedUrl"
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(previewUrl))
-            context.startActivity(intent)
-        }
-    }
-}
-
 @Composable
 fun FileGridItem(
     file: AListFile,
