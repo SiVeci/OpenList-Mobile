@@ -4,37 +4,37 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 
-private val IndigoPrimary = Color(0xFF4F46E5)
+private val IndigoPrimary = Color(0xFF635ACD) // Theme Purple
 private val IndigoOnPrimary = Color(0xFFFFFFFF)
-private val IndigoPrimaryContainer = Color(0xFFE0E7FF)
+private val IndigoPrimaryContainer = Color(0xFFE8E6FF)
 private val IndigoOnPrimaryContainer = Color(0xFF1E1B4B)
 
-private val TealSecondary = Color(0xFF0D9488)
+private val TealSecondary = Color(0xFF8D82D2) // Icon Purple
 private val TealOnSecondary = Color(0xFFFFFFFF)
-private val TealSecondaryContainer = Color(0xFFCCFBF1)
-private val TealOnSecondaryContainer = Color(0xFF134E4A)
+private val TealSecondaryContainer = Color(0xFFF3F0FF)
+private val TealOnSecondaryContainer = Color(0xFF13114A)
 
-private val RoseTertiary = Color(0xFFE11D48)
+private val RoseTertiary = Color(0xFFEF5350) // Error/Logout Red
 private val RoseOnTertiary = Color(0xFFFFFFFF)
 private val RoseTertiaryContainer = Color(0xFFFFE4E6)
 private val RoseOnTertiaryContainer = Color(0xFF4C0519)
 
-private val LightBackground = Color(0xFFF8FAFC)
-private val LightOnBackground = Color(0xFF0F172A)
+private val LightBackground = Color(0xFFFFFFFF)
+private val LightOnBackground = Color(0xFF1A1C1E)
 private val LightSurface = Color(0xFFFFFFFF)
-private val LightOnSurface = Color(0xFF0F172A)
-private val LightSurfaceVariant = Color(0xFFEEF2FF)
-private val LightOnSurfaceVariant = Color(0xFF475569)
-private val LightOutline = Color(0xFFCBD5E1)
-private val LightOutlineVariant = Color(0xFFE2E8F0)
-private val LightInverseSurface = Color(0xFF1E293B)
-private val LightInverseOnSurface = Color(0xFFF1F5F9)
-private val LightInversePrimary = Color(0xFFA5B4FC)
-private val LightError = Color(0xFFDC2626)
+private val LightOnSurface = Color(0xFF1A1C1E)
+private val LightSurfaceVariant = Color(0xFFF9F7FF) // Card background
+private val LightOnSurfaceVariant = Color(0xFF474559)
+private val LightOutline = Color(0xFFE2E1EC)
+private val LightOutlineVariant = Color(0xFFEDECF4)
+private val LightInverseSurface = Color(0xFF1A1C1E) // Selection bar background
+private val LightInverseOnSurface = Color(0xFFF1F0F7)
+private val LightInversePrimary = Color(0xFFC4C0FF)
+private val LightError = Color(0xFFEF5350)
 private val LightOnError = Color(0xFFFFFFFF)
 private val LightErrorContainer = Color(0xFFFEE2E2)
 private val LightOnErrorContainer = Color(0xFF7F1D1D)
-private val LightSurfaceTint = Color(0xFF4F46E5)
+private val LightSurfaceTint = Color(0xFF635ACD)
 private val LightScrim = Color(0xFF000000)
 
 private val DarkBackground = Color(0xFF0F172A)

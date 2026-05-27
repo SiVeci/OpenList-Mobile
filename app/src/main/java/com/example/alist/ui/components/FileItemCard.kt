@@ -2,6 +2,7 @@ package com.example.alist.ui.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,14 +31,25 @@ import androidx.compose.ui.unit.dp
 import com.example.alist.data.remote.model.AListFile
 import java.util.Locale
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FileItemCard(
     file: AListFile,
+    isSelected: Boolean,
+    isSelectionMode: Boolean,
     onClick: () -> Unit,
-    trailingContent: @Composable () -> Unit,
+    onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val ext = file.name.substringAfterLast('.').lowercase()
+    val ext = file.name.substringAfterLast('.', "").lowercase()
     val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "flv", "webm")
     val isImage = ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
 
@@ -48,44 +60,70 @@ fun FileItemCard(
         else -> Icons.Rounded.InsertDriveFile
     }
 
-    val iconTint = if (file.is_dir) MaterialTheme.colorScheme.primary
-    else MaterialTheme.colorScheme.onSurfaceVariant
+    val iconTint = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else if (file.is_dir) {
+        MaterialTheme.colorScheme.secondary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+    }
 
+    // Format: Folder • 2026/5/27 23:26
+    val typeText = if (file.is_dir) "Folder" else ext.uppercase()
     val timeString = try {
-        file.modified.substringBefore("T") + " " + file.modified.substringAfter("T").substringBeforeLast(":")
+        val datePart = file.modified.substringBefore("T").replace("-", "/")
+        val timePart = file.modified.substringAfter("T").substringBeforeLast(":")
+        "$datePart $timePart"
     } catch (e: Exception) {
         file.modified
     }
-
-    val sizeString = if (file.is_dir) "" else formatFileSize(file.size)
-    val metaText = "$timeString  $sizeString".trim()
+    val metaText = "$typeText • $timeString"
 
     Card(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = if (isSelected) 
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+            else 
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick
+                )
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(MaterialTheme.shapes.small)
-                    .let { if (file.is_dir) it else it }
-            )
+            Box(
+                modifier = Modifier.size(44.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = "Selected",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(32.dp)
+                    )
+                } else {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = iconTint,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(16.dp))
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -93,27 +131,29 @@ fun FileItemCard(
             ) {
                 Text(
                     text = file.name,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    ),
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (metaText.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = metaText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = metaText,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 12.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
-
-            trailingContent()
         }
     }
 }
+
 
 fun formatFileSize(size: Long): String {
     if (size <= 0L) return "0 B"

@@ -57,7 +57,10 @@ data class HomeUiState(
     
     val previewTextContent: String? = null,
     val previewTextFileName: String? = null,
-    val isPreviewingTextLoading: Boolean = false
+    val isPreviewingTextLoading: Boolean = false,
+
+    val isSelectionMode: Boolean = false,
+    val selectedFiles: Set<AListFile> = emptySet()
 )
 
 @HiltViewModel
@@ -94,6 +97,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             authRepository.switchProfile(profile.id)
             pathStack.clear()
+            clearSelection()
             fetchFiles("/", isRefresh = false)
         }
     }
@@ -102,6 +106,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             authRepository.logout()
             pathStack.clear()
+            clearSelection()
             _uiState.update { it.copy(
                 files = emptyList(),
                 currentPath = "/",
@@ -115,6 +120,7 @@ class HomeViewModel @Inject constructor(
             authRepository.deleteProfile(profile.id)
             if (_uiState.value.currentProfile?.id == profile.id) {
                 pathStack.clear()
+                clearSelection()
                 _uiState.update { it.copy(
                     files = emptyList(),
                     currentPath = "/",
@@ -125,6 +131,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun refresh() {
+        clearSelection()
         fetchFiles(_uiState.value.currentPath, isRefresh = true)
     }
 
@@ -202,16 +209,55 @@ class HomeViewModel @Inject constructor(
         val state = _uiState.value
         pathStack.add(state.currentPath)
         val newPath = if (state.currentPath == "/") "/$folderName" else "${state.currentPath}/$folderName"
+        clearSelection()
         fetchFiles(newPath)
     }
 
     fun navigateBack(): Boolean {
+        if (_uiState.value.isSelectionMode) {
+            clearSelection()
+            return true
+        }
         if (pathStack.isNotEmpty()) {
             val previousPath = pathStack.removeLast()
+            clearSelection()
             fetchFiles(previousPath)
             return true
         }
         return false
+    }
+
+    // --- Multi-Selection ---
+
+    fun toggleSelectionMode(enabled: Boolean) {
+        _uiState.update { it.copy(isSelectionMode = enabled, selectedFiles = emptySet()) }
+    }
+
+    fun toggleFileSelection(file: AListFile) {
+        _uiState.update { state ->
+            val newSelected = if (state.selectedFiles.contains(file)) {
+                state.selectedFiles - file
+            } else {
+                state.selectedFiles + file
+            }
+            state.copy(
+                selectedFiles = newSelected,
+                isSelectionMode = newSelected.isNotEmpty()
+            )
+        }
+    }
+
+    fun selectAll() {
+        _uiState.update { state ->
+            state.copy(
+                selectedFiles = state.files.toSet(),
+                isSelectionMode = state.files.isNotEmpty()
+            )
+        }
+    }
+
+    fun clearSelection() {
+        _uiState.update { it.copy(isSelectionMode = false, selectedFiles = emptySet()) }
     }
 
     // --- Phase 5: CRUD Operations ---
