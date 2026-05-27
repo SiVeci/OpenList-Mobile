@@ -306,20 +306,28 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Box(modifier = Modifier.fillMaxWidth()) {
-                            if (host.isEmpty()) {
-                                Text(
-                                    text = "Domain or IP",
-                                    color = Color(0xFF94A3B8),
-                                    fontSize = 14.sp
-                                )
-                            }
                             BasicTextField(
                                 value = host,
                                 onValueChange = { host = it },
                                 textStyle = TextStyle(fontSize = 14.sp, color = Color(0xFF334155), fontWeight = FontWeight.Medium),
                                 singleLine = true,
                                 cursorBrush = SolidColor(primaryColor),
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                decorationBox = { innerTextField ->
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentAlignment = Alignment.CenterStart
+                                    ) {
+                                        if (host.isEmpty()) {
+                                            Text(
+                                                text = "Domain or IP",
+                                                color = Color(0xFF94A3B8),
+                                                fontSize = 14.sp
+                                            )
+                                        }
+                                        innerTextField()
+                                    }
+                                }
                             )
                         }
                     }
@@ -341,7 +349,15 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
                             cursorBrush = SolidColor(primaryColor),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            decorationBox = { innerTextField ->
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    innerTextField()
+                                }
+                            }
                         )
                     }
                 }
@@ -453,13 +469,6 @@ fun CustomTextField(
         Spacer(modifier = Modifier.width(10.dp))
         
         Box(modifier = Modifier.weight(1f)) {
-            if (value.isEmpty()) {
-                Text(
-                    text = placeholder,
-                    color = Color(0xFF94A3B8),
-                    fontSize = 14.sp
-                )
-            }
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
@@ -472,7 +481,22 @@ fun CustomTextField(
                 visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
                 keyboardOptions = if (isPassword) KeyboardOptions(keyboardType = KeyboardType.Password) else KeyboardOptions.Default,
                 cursorBrush = SolidColor(Color(0xFF4C45E5)),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                decorationBox = { innerTextField ->
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        if (value.isEmpty()) {
+                            Text(
+                                text = placeholder,
+                                color = Color(0xFF94A3B8),
+                                fontSize = 14.sp
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
             )
         }
         
