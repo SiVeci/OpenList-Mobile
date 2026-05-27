@@ -35,6 +35,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.platform.LocalFocusManager
 import com.example.alist.data.local.ServerProfile
 import java.net.URL
 
@@ -49,6 +52,8 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
     var password by remember { mutableStateOf("") }
     
     var historyExpanded by remember { mutableStateOf(false) }
+    
+    val focusManager = LocalFocusManager.current
 
     val primaryColor = Color(0xFF4C45E5)
     val backgroundColor = Color(0xFFF8F9FA)
@@ -58,6 +63,9 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
         modifier = Modifier
             .fillMaxSize()
             .background(backgroundColor)
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { focusManager.clearFocus() })
+            }
             .padding(horizontal = 24.dp)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -101,80 +109,56 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
         
         Spacer(modifier = Modifier.height(32.dp))
 
-        // History Dropdown
-        if (uiState.profiles.isNotEmpty()) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.History,
-                        contentDescription = "History",
-                        tint = Color(0xFF94A3B8),
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "SELECT FROM HISTORY",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF94A3B8),
-                        letterSpacing = 1.sp
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                ExposedDropdownMenuBox(
-                    expanded = historyExpanded,
-                    onExpandedChange = { historyExpanded = it }
-                ) {
-                    val currentProfile = uiState.currentProfile
-                    val displayText = if (currentProfile != null) {
-                        if (currentProfile.aliasName.isNotBlank()) currentProfile.aliasName else currentProfile.serverUrl
-                    } else {
-                        ""
-                    }
-                    
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(44.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.White)
-                            .padding(horizontal = 14.dp)
-                            .menuAnchor(),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (currentProfile == null) {
-                                Text(
-                                    text = "Pick a saved server...",
-                                    fontSize = 14.sp,
-                                    color = Color(0xFF94A3B8)
-                                )
-                            } else {
-                                Text(
-                                    text = displayText,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = Color(0xFF334155)
-                                )
-                            }
+        // General Info with History Dropdown combined
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "GENERAL INFO",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF94A3B8),
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            ExposedDropdownMenuBox(
+                expanded = historyExpanded,
+                onExpandedChange = { historyExpanded = it }
+            ) {
+                // We wrap CustomTextField inside the menu box
+                Box(modifier = Modifier.menuAnchor()) {
+                    CustomTextField(
+                        value = aliasName,
+                        onValueChange = { aliasName = it },
+                        icon = Icons.Outlined.Label,
+                        placeholder = "Alias Name (e.g. NAS)",
+                        trailingIcon = {
                             Icon(
                                 imageVector = Icons.Default.KeyboardArrowDown,
-                                contentDescription = "Expand",
+                                contentDescription = "Expand history",
                                 tint = Color(0xFF94A3B8),
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(18.dp).clickable { historyExpanded = !historyExpanded }
                             )
                         }
-                    }
+                    )
+                }
 
-                    ExposedDropdownMenu(
-                        expanded = historyExpanded,
-                        onDismissRequest = { historyExpanded = false }
-                    ) {
+                ExposedDropdownMenu(
+                    expanded = historyExpanded,
+                    onDismissRequest = { historyExpanded = false }
+                ) {
+                    if (uiState.profiles.isEmpty()) {
+                        DropdownMenuItem(
+                            text = { 
+                                Text(
+                                    text = "No saved servers",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF94A3B8)
+                                ) 
+                            },
+                            onClick = { historyExpanded = false },
+                            enabled = false
+                        )
+                    } else {
                         uiState.profiles.forEach { profile ->
                             val title = if (profile.aliasName.isNotBlank()) profile.aliasName else profile.username
                             val subtitle = profile.serverUrl
@@ -226,25 +210,6 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(24.dp))
-        }
-
-        // General Info
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = "GENERAL INFO",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF94A3B8),
-                letterSpacing = 1.sp
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            CustomTextField(
-                value = aliasName,
-                onValueChange = { aliasName = it },
-                icon = Icons.Outlined.Label,
-                placeholder = "Alias Name (e.g. NAS)"
-            )
         }
         
         Spacer(modifier = Modifier.height(24.dp))
@@ -461,7 +426,8 @@ fun CustomTextField(
     onValueChange: (String) -> Unit,
     icon: ImageVector,
     placeholder: String,
-    isPassword: Boolean = false
+    isPassword: Boolean = false,
+    trailingIcon: @Composable (() -> Unit)? = null
 ) {
     Row(
         modifier = Modifier
@@ -502,6 +468,11 @@ fun CustomTextField(
                 cursorBrush = SolidColor(Color(0xFF4C45E5)),
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+        
+        if (trailingIcon != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            trailingIcon()
         }
     }
 }
