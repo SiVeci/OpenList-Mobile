@@ -204,7 +204,8 @@ class TransferService : Service() {
             val token = tokenManager.currentToken ?: throw Exception("No token")
             
             // task.fileUrl here contains the target path
-            val encodedPath = java.net.URLEncoder.encode("${task.fileUrl}/${task.fileName}", "UTF-8").replace("+", "%20")
+            val targetPath = if (task.fileUrl.endsWith("/")) "${task.fileUrl}${task.fileName}" else "${task.fileUrl}/${task.fileName}"
+            val encodedPath = java.net.URLEncoder.encode(targetPath, "UTF-8").replace("+", "%20")
             val url = "$baseUrl/api/fs/put"
 
             val requestBody = ProgressRequestBody(
@@ -224,7 +225,6 @@ class TransferService : Service() {
                 .url(url)
                 .addHeader("Authorization", token)
                 .addHeader("File-Path", encodedPath)
-                .addHeader("Content-Length", task.totalBytes.toString())
                 .put(requestBody)
                 .build()
 
