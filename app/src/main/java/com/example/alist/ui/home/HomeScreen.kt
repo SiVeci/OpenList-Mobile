@@ -111,7 +111,9 @@ fun HomeScreen(
                         ) {
                             uiState.profiles.forEach { profile ->
                                 DropdownMenuItem(
-                                    text = { Text(profile.serverUrl) },
+                                    text = { 
+                                        Text(if (profile.aliasName.isNotBlank()) profile.aliasName else profile.serverUrl) 
+                                    },
                                     onClick = {
                                         viewModel.switchProfile(profile)
                                         expanded = false
@@ -123,6 +125,21 @@ fun HomeScreen(
                                     }
                                 )
                             }
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("Logout", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    viewModel.logout()
+                                    expanded = false
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Logout,
+                                        contentDescription = "Logout",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            )
                         }
                     }
                 },
@@ -297,92 +314,8 @@ fun HomeScreen(
     )
 }
 
-@Composable
-fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
-    var serverUrl by remember { mutableStateOf("https://al.chirmyram.com") }
-    var username by remember { mutableStateOf("admin") }
-    var password by remember { mutableStateOf("123456") }
+// Replace LoginView entirely as it is now in a separate file
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 32.dp)
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            text = "OpenList",
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.primary
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "连接到您的 AList 服务器",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(32.dp))
-
-        OutlinedTextField(
-            value = serverUrl,
-            onValueChange = { serverUrl = it },
-            label = { Text("Server URL") },
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(
-            value = username,
-            onValueChange = { username = it },
-            label = { Text("Username") },
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = { Text("Password") },
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium
-        )
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Button(
-            onClick = { viewModel.testLoginAndFetch(serverUrl, username, password) },
-            modifier = Modifier.fillMaxWidth().height(50.dp),
-            enabled = !uiState.isLoading,
-            shape = MaterialTheme.shapes.medium
-        ) {
-            if (uiState.isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    strokeWidth = 2.dp
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-            }
-            Text(if (uiState.isLoading) "连接中..." else "登录")
-        }
-
-        if (uiState.error != null) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.errorContainer
-            ) {
-                Text(
-                    text = uiState.error!!,
-                    modifier = Modifier.padding(12.dp),
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

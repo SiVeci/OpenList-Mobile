@@ -98,6 +98,18 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun logout() {
+        viewModelScope.launch {
+            authRepository.logout()
+            pathStack.clear()
+            _uiState.update { it.copy(
+                files = emptyList(),
+                currentPath = "/",
+                currentProfile = null
+            ) }
+        }
+    }
+
     fun refresh() {
         fetchFiles(_uiState.value.currentPath, isRefresh = true)
     }
@@ -364,10 +376,10 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(files = sorted) }
     }
 
-    fun testLoginAndFetch(serverUrl: String, user: String, pass: String) {
+    fun testLoginAndFetch(aliasName: String, serverUrl: String, user: String, pass: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            val loginResult = authRepository.loginAndSave(serverUrl, user, pass)
+            val loginResult = authRepository.loginAndSave(aliasName, serverUrl, user, pass)
             if (loginResult.isFailure) {
                 _uiState.update { it.copy(
                     isLoading = false,

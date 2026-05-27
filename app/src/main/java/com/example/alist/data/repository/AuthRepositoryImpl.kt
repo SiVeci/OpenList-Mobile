@@ -43,7 +43,14 @@ class AuthRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun loginAndSave(serverUrl: String, username: String, password: String): Result<String> = withContext(Dispatchers.IO) {
+    override suspend fun logout() = withContext(Dispatchers.IO) {
+        dao.clearActiveProfiles()
+        tokenManager.currentProfileId = -1L
+        tokenManager.currentToken = null
+        tokenManager.currentServerUrl = null
+    }
+
+    override suspend fun loginAndSave(aliasName: String, serverUrl: String, username: String, password: String): Result<String> = withContext(Dispatchers.IO) {
         try {
             var baseUrl = serverUrl.trim().trimEnd('/')
             if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
@@ -59,6 +66,7 @@ class AuthRepositoryImpl @Inject constructor(
                 
                 val encryptedToken = keystoreManager.encrypt(token)
                 val profile = ServerProfile(
+                    aliasName = aliasName,
                     serverUrl = baseUrl,
                     username = username,
                     encryptedToken = encryptedToken,
