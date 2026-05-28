@@ -99,7 +99,7 @@ fun FileItemCard(
                     onLongClick = onLongClick
                 )
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
