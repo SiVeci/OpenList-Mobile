@@ -105,3 +105,15 @@ OpenList Mobile 是一款基于 Android 平台开发的 AList 客户端应用。
     ./gradlew assembleRelease
     ```
 注：本项目的构建阶段依赖 KSP (Kotlin Symbol Processing) 来生成 Hilt 依赖注入代码和 Room 数据库实现，需确保本地网络环境能够稳定连接至 Maven Central 与 Google Maven 仓库。
+
+## 待办事项 (TODO / Roadmap)
+
+### 性能与稳定性优化
+- [ ] **SAF DocumentsProvider 防盗链适配**: 优化 `AListDocumentsProvider` 中的文件流获取逻辑。摒弃硬编码直连，改为调用服务端 `/api/fs/get` 接口获取带有签名的临时直链，确保访问受密码保护或开启了防盗链验证的目录时不会遭遇 403 权限拒绝。
+- [ ] **TransferService 性能优化与内存防抖**: 降低大文件传输过程中对 Room 数据库（SQLite）的高频写操作（当前约每半秒一次）。引入 `MutableStateFlow` 在内存层维护 UI 进度，采用降频或基于状态变更的策略落盘持久化，避免不必要的 I/O 损耗与 Compose 重组卡顿。
+
+### 核心功能迭代
+- [ ] **内置媒体播放中心**: 集成 `androidx.media3:media3-exoplayer`，实现端内的流媒体视频播放及后台音乐音频播放，彻底解决调用外部播放器时的鉴权失败问题。
+- [ ] **全局聚合搜索与过滤**: 接入 AList 的 `/api/fs/search` 接口，提供全局跨目录检索能力，并支持按文件类型（图片、视频、文档）、大小等条件进行精确过滤。
+- [ ] **高级文本与代码预览器**: 升级当前的 `TextPreviewOverlay`，集成第三方渲染库以优美地渲染 Markdown 格式文本，同时为代码文件（如 `.py`, `.js`, `.json` 等）提供语法高亮和行号显示功能。
+- [ ] **指定目录一键同步**: 支持将本地系统文件夹与 AList 指定云端目录进行绑定，通过 Android `WorkManager` 实现后台静默或手动一键同步（支持双向同步或单向备份）。
