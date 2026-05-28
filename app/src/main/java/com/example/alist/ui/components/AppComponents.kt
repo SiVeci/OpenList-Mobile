@@ -28,18 +28,25 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.automirrored.rounded.Logout
+import androidx.compose.material.icons.automirrored.rounded.SwapVert
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.ExitToApp
-import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.List
-import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.VerticalAlignBottom
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Logout
+import androidx.compose.material.icons.rounded.SwapVert
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -86,14 +93,14 @@ fun HomeTopBar(
         )
         IconButton(onClick = onTransferClick) {
             Icon(
-                imageVector = Icons.Outlined.VerticalAlignBottom,
+                imageVector = Icons.AutoMirrored.Rounded.SwapVert,
                 contentDescription = "Transfers",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         IconButton(onClick = onLogoutClick) {
             Icon(
-                imageVector = Icons.Outlined.ExitToApp,
+                imageVector = Icons.AutoMirrored.Rounded.Logout,
                 contentDescription = "Logout",
                 tint = MaterialTheme.colorScheme.error
             )
@@ -116,7 +123,7 @@ fun BreadcrumbNavigation(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            imageVector = Icons.Filled.Home,
+            imageVector = Icons.Outlined.Home,
             contentDescription = "Home",
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
             modifier = Modifier
@@ -126,7 +133,7 @@ fun BreadcrumbNavigation(
         
         segments.forEachIndexed { index, segment ->
             Icon(
-                imageVector = Icons.Filled.KeyboardArrowRight,
+                imageVector = Icons.Rounded.ChevronRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
                 modifier = Modifier.size(16.dp).padding(horizontal = 4.dp)
@@ -218,10 +225,10 @@ fun HomeSearchBar(
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            ActionButton(icon = Icons.Outlined.FilterList, onClick = onFilterClick)
-            ActionButton(icon = Icons.Outlined.Sort, onClick = onSortClick)
+            ActionButton(icon = Icons.Outlined.FilterAlt, onClick = onFilterClick)
+            ActionButton(icon = Icons.AutoMirrored.Rounded.SwapVert, onClick = onSortClick)
             ActionButton(
                 icon = if (isGridView) Icons.Outlined.List else Icons.Outlined.GridView,
                 onClick = onToggleView
@@ -238,14 +245,14 @@ private fun ActionButton(
     IconButton(
         onClick = onClick,
         modifier = Modifier
-            .size(44.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), CircleShape)
+            .size(48.dp)
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            modifier = Modifier.size(20.dp)
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp)
         )
     }
 }
