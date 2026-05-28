@@ -110,46 +110,23 @@ fun HomeScreen(
         },
         floatingActionButton = {
             if (uiState.profiles.isNotEmpty() && uiState.currentProfile != null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 32.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
+                // Large Purple Upload FAB
+                FloatingActionButton(
+                    onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = Color.White,
+                    shape = CircleShape,
+                    modifier = Modifier.size(72.dp)
                 ) {
-                    // Small White Back FAB
-                    if (uiState.currentPath != "/") {
-                        SmallFloatingActionButton(
-                            onClick = { viewModel.navigateBack() },
-                            containerColor = Color.White,
-                            contentColor = MaterialTheme.colorScheme.primary,
-                            shape = CircleShape,
-                            modifier = Modifier.size(56.dp)
-                        ) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                        }
-                    } else {
-                        Spacer(modifier = Modifier.size(56.dp))
-                    }
-
-                    // Large Purple Upload FAB
-                    FloatingActionButton(
-                        onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = Color.White,
-                        shape = CircleShape,
-                        modifier = Modifier.size(72.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudUpload,
-                            contentDescription = "Upload File",
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.CloudUpload,
+                        contentDescription = "Upload File",
+                        modifier = Modifier.size(32.dp)
+                    )
                 }
             }
         },
-        floatingActionButtonPosition = FabPosition.Center,
+        floatingActionButtonPosition = FabPosition.End,
         bottomBar = {
             Column {
                 // Shared Files Upload Bar
