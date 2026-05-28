@@ -10,6 +10,7 @@ local.properties
 .gradle/
 build/
 */build/
+*/release/
 
 # Mac 系统生成的垃圾文件 (如果你或协作者用 Mac)
 .DS_Store
