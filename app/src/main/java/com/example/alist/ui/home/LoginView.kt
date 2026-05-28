@@ -75,7 +75,7 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
     val density = LocalDensity.current
     val popupYOffset = with(density) { 52.dp.roundToPx() }
 
-    val primaryColor = Color(0xFF4C45E5)
+    val primaryColor = Color(0xFF3B82F6)
     val backgroundColor = Color(0xFFF8F9FA)
     val inputBackgroundColor = Color(0xFFF3F4F6)
 
@@ -540,7 +540,7 @@ fun CustomTextField(
                 singleLine = true,
                 visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
                 keyboardOptions = if (isPassword) KeyboardOptions(keyboardType = KeyboardType.Password) else KeyboardOptions.Default,
-                cursorBrush = SolidColor(Color(0xFF4C45E5)),
+                cursorBrush = SolidColor(Color(0xFF3B82F6)),
                 modifier = Modifier.fillMaxWidth(),
                 decorationBox = { innerTextField ->
                     Box(
