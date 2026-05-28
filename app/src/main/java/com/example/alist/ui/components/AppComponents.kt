@@ -30,7 +30,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.rounded.Logout
-import androidx.compose.material.icons.automirrored.rounded.SwapVert
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -93,7 +92,7 @@ fun HomeTopBar(
         )
         IconButton(onClick = onTransferClick) {
             Icon(
-                imageVector = Icons.AutoMirrored.Rounded.SwapVert,
+                imageVector = Icons.Rounded.SwapVert,
                 contentDescription = "Transfers",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -228,7 +227,7 @@ fun HomeSearchBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             ActionButton(icon = Icons.Outlined.FilterAlt, onClick = onFilterClick)
-            ActionButton(icon = Icons.AutoMirrored.Rounded.SwapVert, onClick = onSortClick)
+            ActionButton(icon = Icons.Rounded.SwapVert, onClick = onSortClick)
             ActionButton(
                 icon = if (isGridView) Icons.Outlined.List else Icons.Outlined.GridView,
                 onClick = onToggleView
