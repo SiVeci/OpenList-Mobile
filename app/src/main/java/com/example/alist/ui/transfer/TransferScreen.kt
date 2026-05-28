@@ -1,6 +1,7 @@
 package com.example.alist.ui.transfer
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,7 +22,7 @@ import com.example.alist.data.local.TransferTask
 import com.example.alist.data.local.TransferType
 import com.example.alist.ui.components.EmptyState
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TransferScreen(
     onNavigateBack: () -> Unit,
@@ -124,7 +125,8 @@ fun TransferScreen(
                             onPause = { viewModel.pauseTask(it) },
                             onResume = { viewModel.resumeTask(it) },
                             onCancel = { viewModel.cancelTask(it) },
-                            onDelete = { viewModel.deleteTaskRecord(it) }
+                            onDelete = { viewModel.deleteTaskRecord(it) },
+                            modifier = Modifier.animateItemPlacement()
                         )
                     }
                     item {
@@ -142,7 +144,8 @@ fun TransferTaskCard(
     onPause: (TransferTask) -> Unit,
     onResume: (TransferTask) -> Unit,
     onCancel: (TransferTask) -> Unit,
-    onDelete: (TransferTask) -> Unit
+    onDelete: (TransferTask) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -175,7 +178,7 @@ fun TransferTaskCard(
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface

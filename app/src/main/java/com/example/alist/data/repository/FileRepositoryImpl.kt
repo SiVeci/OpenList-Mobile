@@ -99,6 +99,23 @@ class FileRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun downloadFileToCache(url: String, fileName: String, cacheDir: java.io.File): Result<java.io.File> = withContext(Dispatchers.IO) {
+        try {
+            val dir = java.io.File(cacheDir, "doc_preview")
+            if (!dir.exists()) dir.mkdirs()
+            val targetFile = java.io.File(dir, fileName)
+            val responseBody = apiService.downloadFile(url)
+            responseBody.byteStream().use { input ->
+                targetFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            Result.success(targetFile)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     override suspend fun uploadFile(path: String, fileName: String, inputStream: java.io.InputStream, contentLength: Long): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val baseUrl = tokenManager.currentServerUrl ?: return@withContext Result.failure(Exception("No active server"))

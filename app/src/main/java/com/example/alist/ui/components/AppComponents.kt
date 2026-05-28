@@ -30,6 +30,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.rounded.Logout
+import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -40,11 +41,10 @@ import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.List
 import androidx.compose.material.icons.outlined.Storage
-import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.VerticalAlignBottom
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.ImportExport
 import androidx.compose.material.icons.rounded.Logout
-import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -90,14 +90,14 @@ fun HomeTopBar(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f)
         )
-        IconButton(onClick = onTransferClick) {
+        BounceIconButton(onClick = onTransferClick) {
             Icon(
-                imageVector = Icons.Rounded.SwapVert,
+                imageVector = Icons.Rounded.ImportExport,
                 contentDescription = "Transfers",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        IconButton(onClick = onLogoutClick) {
+        BounceIconButton(onClick = onLogoutClick) {
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.Logout,
                 contentDescription = "Logout",
@@ -127,7 +127,7 @@ fun BreadcrumbNavigation(
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
             modifier = Modifier
                 .size(20.dp)
-                .clickable { onPathClick("/") }
+                .bounceClick { onPathClick("/") }
         )
         
         segments.forEachIndexed { index, segment ->
@@ -147,7 +147,7 @@ fun BreadcrumbNavigation(
                 color = if (isLast) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 modifier = Modifier
                     .clip(MaterialTheme.shapes.small)
-                    .clickable { onPathClick(currentPath) }
+                    .bounceClick(enabled = !isLast) { onPathClick(currentPath) }
                     .padding(horizontal = 4.dp, vertical = 2.dp)
             )
         }
@@ -165,7 +165,9 @@ fun HomeSearchBar(
     onSortClick: () -> Unit,
     isGridView: Boolean,
     onToggleView: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    filterMenu: @Composable () -> Unit = {},
+    sortMenu: @Composable () -> Unit = {}
 ) {
     Row(
         modifier = modifier
@@ -226,8 +228,14 @@ fun HomeSearchBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            ActionButton(icon = Icons.Outlined.FilterAlt, onClick = onFilterClick)
-            ActionButton(icon = Icons.Rounded.SwapVert, onClick = onSortClick)
+            Box {
+                ActionButton(icon = Icons.Outlined.FilterAlt, onClick = onFilterClick)
+                filterMenu()
+            }
+            Box {
+                ActionButton(icon = Icons.AutoMirrored.Rounded.Sort, onClick = onSortClick)
+                sortMenu()
+            }
             ActionButton(
                 icon = if (isGridView) Icons.Outlined.List else Icons.Outlined.GridView,
                 onClick = onToggleView
@@ -241,7 +249,7 @@ private fun ActionButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit
 ) {
-    IconButton(
+    BounceIconButton(
         onClick = onClick,
         modifier = Modifier
             .size(48.dp)

@@ -46,6 +46,13 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.example.alist.data.local.ServerProfile
 import java.net.URL
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import com.example.alist.ui.components.bounceClick
+import com.example.alist.ui.components.BounceIconButton
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -144,7 +151,7 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                             modifier = Modifier
                                 .size(24.dp)
                                 .clip(RoundedCornerShape(4.dp))
-                                .clickable { 
+                                .bounceClick { 
                                     focusManager.clearFocus()
                                     historyExpanded = !historyExpanded 
                                 },
@@ -202,7 +209,7 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .clickable {
+                                                .bounceClick {
                                                     historyExpanded = false
                                                     aliasName = profile.aliasName
                                                     username = profile.username
@@ -234,7 +241,7 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                                                 )
                                             }
                                             
-                                            IconButton(
+                                            BounceIconButton(
                                                 onClick = { viewModel.deleteProfile(profile) },
                                                 modifier = Modifier.size(32.dp)
                                             ) {
@@ -310,7 +317,7 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                             .fillMaxHeight()
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (isHttps) Color(0xFF10B981).copy(alpha = 0.1f) else inputBackgroundColor)
-                            .clickable {
+                            .bounceClick {
                                 isHttps = !isHttps
                                 if (isHttps && port == "80") port = "443"
                                 if (!isHttps && port == "443") port = "80"
@@ -424,6 +431,17 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
         
         Spacer(modifier = Modifier.height(24.dp))
 
+        val buttonInteractionSource = remember { MutableInteractionSource() }
+        val isButtonPressed by buttonInteractionSource.collectIsPressedAsState()
+        val buttonScale by animateFloatAsState(
+            targetValue = if (isButtonPressed && !uiState.isLoading && host.isNotBlank() && username.isNotBlank()) 0.96f else 1f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessLow
+            ),
+            label = "ButtonScale"
+        )
+
         // Connect Button
         Button(
             onClick = {
@@ -432,9 +450,14 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
                 val name = if (aliasName.isBlank()) host else aliasName
                 viewModel.testLoginAndFetch(name, serverUrl, username, password)
             },
+            interactionSource = buttonInteractionSource,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp),
+                .height(48.dp)
+                .graphicsLayer {
+                    scaleX = buttonScale
+                    scaleY = buttonScale
+                },
             enabled = !uiState.isLoading && host.isNotBlank() && username.isNotBlank(),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(

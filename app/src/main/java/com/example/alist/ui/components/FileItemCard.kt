@@ -12,10 +12,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Android
+import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.FolderZip
 import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.InsertDriveFile
+import androidx.compose.material.icons.automirrored.rounded.InsertDriveFile
 import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.PictureAsPdf
+import androidx.compose.material.icons.rounded.Slideshow
+import androidx.compose.material.icons.rounded.TableChart
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -39,6 +47,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FileItemCard(
@@ -49,23 +66,15 @@ fun FileItemCard(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val ext = file.name.substringAfterLast('.', "").lowercase()
-    val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "flv", "webm")
-    val isImage = ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
-
-    val icon: ImageVector = if (file.is_dir) Icons.Rounded.Folder
-    else when {
-        isVideo -> Icons.Rounded.Movie
-        isImage -> Icons.Rounded.Image
-        else -> Icons.Rounded.InsertDriveFile
-    }
+    val fileIconInfo = getFileIconAndTint(file)
+    val icon = fileIconInfo.icon
 
     val iconTint = if (isSelected) {
         MaterialTheme.colorScheme.primary
     } else if (file.is_dir) {
         MaterialTheme.colorScheme.secondary
     } else {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        fileIconInfo.tint
     }
 
     // Format: Folder • 2026/5/27 23:26 or 32.9 MB • 2026/5/28 08:23
@@ -79,9 +88,24 @@ fun FileItemCard(
     }
     val metaText = "$prefixText • $timeString"
 
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.97f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "bounceScale"
+    )
+
     Card(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .padding(horizontal = 12.dp, vertical = 4.dp),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
@@ -96,7 +120,9 @@ fun FileItemCard(
             modifier = Modifier
                 .combinedClickable(
                     onClick = onClick,
-                    onLongClick = onLongClick
+                    onLongClick = onLongClick,
+                    interactionSource = interactionSource,
+                    indication = androidx.compose.foundation.LocalIndication.current
                 )
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 10.dp),
@@ -160,4 +186,84 @@ fun formatFileSize(size: Long): String {
     val units = arrayOf("B", "KB", "MB", "GB", "TB")
     val digitGroups = (Math.log10(size.toDouble()) / Math.log10(1024.0)).toInt()
     return String.format(Locale.getDefault(), "%.1f %s", size / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
+}
+
+data class FileIconInfo(
+    val icon: ImageVector,
+    val tint: Color
+)
+
+@Composable
+fun getFileIconAndTint(file: AListFile): FileIconInfo {
+    if (file.is_dir) {
+        return FileIconInfo(
+            icon = Icons.Rounded.Folder,
+            tint = MaterialTheme.colorScheme.secondary
+        )
+    }
+
+    val ext = file.name.substringAfterLast('.', "").lowercase()
+
+    return when (ext) {
+        // Audio
+        "mp3", "wav", "flac", "ogg", "m4a", "aac", "wma", "ape" -> FileIconInfo(
+            icon = Icons.Rounded.MusicNote,
+            tint = Color(0xFF9C27B0) // Purple
+        )
+        // Video
+        "mp4", "mkv", "avi", "mov", "flv", "webm", "rmvb", "3gp", "ts" -> FileIconInfo(
+            icon = Icons.Rounded.Movie,
+            tint = Color(0xFFE91E63) // Pink/Red
+        )
+        // Image
+        "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "ico", "heic", "tiff" -> FileIconInfo(
+            icon = Icons.Rounded.Image,
+            tint = Color(0xFF00BCD4) // Cyan
+        )
+        // Code / Config
+        "json", "yaml", "yml", "xml", "kt", "java", "py", "js", "html", "css", "sh", "bat", "c", "cpp", "h", "cs", "go", "rs", "sql" -> FileIconInfo(
+            icon = Icons.Rounded.Code,
+            tint = Color(0xFFFF9800) // Amber/Orange
+        )
+        // PDF
+        "pdf" -> FileIconInfo(
+            icon = Icons.Rounded.PictureAsPdf,
+            tint = Color(0xFFF44336) // Red
+        )
+        // Word Document
+        "doc", "docx", "odt", "rtf" -> FileIconInfo(
+            icon = Icons.Rounded.Description,
+            tint = Color(0xFF2196F3) // Blue
+        )
+        // Excel / Spreadsheet
+        "xls", "xlsx", "csv", "ods" -> FileIconInfo(
+            icon = Icons.Rounded.TableChart,
+            tint = Color(0xFF4CAF50) // Green
+        )
+        // PowerPoint / Slides
+        "ppt", "pptx", "odp" -> FileIconInfo(
+            icon = Icons.Rounded.Slideshow,
+            tint = Color(0xFFFF5722) // Deep Orange
+        )
+        // Archive / Compressed
+        "zip", "rar", "7z", "tar", "gz", "bz2", "xz" -> FileIconInfo(
+            icon = Icons.Rounded.FolderZip,
+            tint = Color(0xFFFFC107) // Yellow-amber
+        )
+        // App / Executable
+        "apk" -> FileIconInfo(
+            icon = Icons.Rounded.Android,
+            tint = Color(0xFF8BC34A) // Lime green
+        )
+        // Text / General Document
+        "txt", "md", "log", "ini", "conf" -> FileIconInfo(
+            icon = Icons.Rounded.Description,
+            tint = Color(0xFF757575) // Gray
+        )
+        // Default File
+        else -> FileIconInfo(
+            icon = Icons.AutoMirrored.Rounded.InsertDriveFile,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        )
+    }
 }

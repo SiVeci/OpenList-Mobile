@@ -41,6 +41,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -51,6 +58,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import coil.request.ImageRequest
 import com.example.alist.data.remote.model.AListFile
 import com.example.alist.ui.components.*
 import java.net.URLEncoder
@@ -112,13 +121,30 @@ fun HomeScreen(
         },
         floatingActionButton = {
             if (uiState.profiles.isNotEmpty() && uiState.currentProfile != null) {
+                val interactionSource = remember { MutableInteractionSource() }
+                val isPressed by interactionSource.collectIsPressedAsState()
+                val scale by animateFloatAsState(
+                    targetValue = if (isPressed) 0.9f else 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    ),
+                    label = "FabScale"
+                )
+
                 // Large Purple Upload FAB
                 FloatingActionButton(
                     onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = Color.White,
-                    shape = CircleShape,
-                    modifier = Modifier.size(72.dp)
+                    shape = RoundedCornerShape(20.dp),
+                    interactionSource = interactionSource,
+                    modifier = Modifier
+                        .size(64.dp)
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                        }
                 ) {
                     Icon(
                         imageVector = Icons.Default.CloudUpload,
@@ -319,9 +345,17 @@ fun HomeScreen(
         fileName = uiState.previewTextFileName,
         onDismiss = { viewModel.clearTextPreview() }
     )
+
+    // --- PDF Preview Overlay ---
+    PdfPreviewOverlay(
+        pdfFile = uiState.pdfPreviewFile,
+        isLoading = uiState.isPdfLoading,
+        fileName = uiState.pdfPreviewFileName,
+        onDismiss = { viewModel.clearPdfPreview() }
+    )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun FileBrowserView(
     viewModel: HomeViewModel,
@@ -364,41 +398,42 @@ fun FileBrowserView(
                 onFilterClick = { showFilterMenu = true },
                 onSortClick = { showSortMenu = true },
                 isGridView = uiState.isGridView,
-                onToggleView = { viewModel.toggleViewMode() }
-            )
-        }
-
-        Box {
-            DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
-                DropdownMenuItem(
-                    text = { Text("Name ${if (uiState.sortBy == SortBy.Name) "✓" else ""}") },
-                    onClick = { viewModel.updateSortBy(SortBy.Name); showSortMenu = false }
-                )
-                DropdownMenuItem(
-                    text = { Text("Size ${if (uiState.sortBy == SortBy.Size) "✓" else ""}") },
-                    onClick = { viewModel.updateSortBy(SortBy.Size); showSortMenu = false }
-                )
-                DropdownMenuItem(
-                    text = { Text("Time ${if (uiState.sortBy == SortBy.Time) "✓" else ""}") },
-                    onClick = { viewModel.updateSortBy(SortBy.Time); showSortMenu = false }
-                )
-                HorizontalDivider()
-                DropdownMenuItem(
-                    text = { Text(if (uiState.sortOrder == SortOrder.Asc) "Ascending" else "Descending") },
-                    onClick = { 
-                        viewModel.updateSortOrder(if (uiState.sortOrder == SortOrder.Asc) SortOrder.Desc else SortOrder.Asc)
-                        showSortMenu = false 
+                onToggleView = { viewModel.toggleViewMode() },
+                filterMenu = {
+                    DropdownMenu(expanded = showFilterMenu, onDismissRequest = { showFilterMenu = false }) {
+                        FilterCategory.values().forEach { cat ->
+                            DropdownMenuItem(
+                                text = { Text("${cat.label} ${if (uiState.filterCategory == cat) "✓" else ""}") },
+                                onClick = { viewModel.updateFilterCategory(cat); showFilterMenu = false }
+                            )
+                        }
                     }
-                )
-            }
-            DropdownMenu(expanded = showFilterMenu, onDismissRequest = { showFilterMenu = false }) {
-                FilterCategory.values().forEach { cat ->
-                    DropdownMenuItem(
-                        text = { Text("${cat.label} ${if (uiState.filterCategory == cat) "✓" else ""}") },
-                        onClick = { viewModel.updateFilterCategory(cat); showFilterMenu = false }
-                    )
+                },
+                sortMenu = {
+                    DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Name ${if (uiState.sortBy == SortBy.Name) "✓" else ""}") },
+                            onClick = { viewModel.updateSortBy(SortBy.Name); showSortMenu = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Size ${if (uiState.sortBy == SortBy.Size) "✓" else ""}") },
+                            onClick = { viewModel.updateSortBy(SortBy.Size); showSortMenu = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Time ${if (uiState.sortBy == SortBy.Time) "✓" else ""}") },
+                            onClick = { viewModel.updateSortBy(SortBy.Time); showSortMenu = false }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text(if (uiState.sortOrder == SortOrder.Asc) "Ascending" else "Descending") },
+                            onClick = { 
+                                viewModel.updateSortOrder(if (uiState.sortOrder == SortOrder.Asc) SortOrder.Desc else SortOrder.Asc)
+                                showSortMenu = false 
+                            }
+                        )
+                    }
                 }
-            }
+            )
         }
 
         Spacer(modifier = Modifier.height(1.dp))
@@ -420,85 +455,92 @@ fun FileBrowserView(
                 .nestedScroll(pullToRefreshState.nestedScrollConnection)
                 .clipToBounds()
         ) {
-            when {
-                uiState.isLoading && uiState.files.isEmpty() -> {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(36.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            strokeWidth = 3.dp
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        translationY = pullToRefreshState.verticalOffset
+                    }
+            ) {
+                when {
+                    uiState.isLoading && uiState.files.isEmpty() -> {
+                        Column(
+                            modifier = Modifier.align(Alignment.Center),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(36.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 3.dp
+                            )
+                        }
+                    }
+                    uiState.error != null && uiState.files.isEmpty() -> {
+                        ErrorState(
+                            message = uiState.error!!,
+                            onRetry = { viewModel.refresh() },
+                            modifier = Modifier.align(Alignment.Center)
                         )
                     }
-                }
-                uiState.error != null && uiState.files.isEmpty() -> {
-                    ErrorState(
-                        message = uiState.error!!,
-                        onRetry = { viewModel.refresh() },
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-                uiState.files.isEmpty() -> {
-                    EmptyState(
-                        title = "No files found",
-                        subtitle = "This folder is empty",
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-                else -> {
-                    if (uiState.isGridView) {
-                        LazyVerticalGrid(
-                            columns = GridCells.Adaptive(120.dp),
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp, start = 12.dp, end = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            items(uiState.files, key = { it.name + it.modified }) { file ->
-                                val isSelected = uiState.selectedFiles.contains(file)
-                                // Note: FileGridItem is currently a legacy component, we should ideally reuse FileItemCard or update FileGridItem for selection
-                                FileGridItem(
-                                    file = file,
-                                    viewModel = viewModel,
-                                    context = context,
-                                    onRenameRequest = { /* TODO */ },
-                                    onDeleteRequest = { /* TODO */ },
-                                    onImagePreview = onImagePreview
-                                )
-                                // Add click handling logic for Grid if needed, but for now we focus on List as per screenshot
+                    uiState.files.isEmpty() -> {
+                        EmptyState(
+                            title = "No files found",
+                            subtitle = "This folder is empty",
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                    else -> {
+                        if (uiState.isGridView) {
+                            LazyVerticalGrid(
+                                columns = GridCells.Adaptive(120.dp),
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp, start = 12.dp, end = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                items(uiState.files, key = { it.name + it.modified }) { file ->
+                                    FileGridItem(
+                                        file = file,
+                                        viewModel = viewModel,
+                                        context = context,
+                                        onRenameRequest = { /* TODO */ },
+                                        onDeleteRequest = { /* TODO */ },
+                                        onImagePreview = onImagePreview,
+                                        modifier = Modifier.animateItemPlacement()
+                                    )
+                                }
                             }
-                        }
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp)
-                        ) {
-                            items(uiState.files, key = { it.name + it.modified }) { file ->
-                                val isSelected = uiState.selectedFiles.contains(file)
-                                FileItemCard(
-                                    file = file,
-                                    isSelected = isSelected,
-                                    isSelectionMode = uiState.isSelectionMode,
-                                    onClick = {
-                                        if (uiState.isSelectionMode) {
-                                            viewModel.toggleFileSelection(file)
-                                        } else {
-                                            handleFileClick(file, viewModel, context, onImagePreview = onImagePreview)
-                                        }
-                                    },
-                                    onLongClick = {
-                                        if (!uiState.isSelectionMode) {
-                                            viewModel.toggleSelectionMode(true)
-                                            viewModel.toggleFileSelection(file)
-                                        }
-                                    }
-                                )
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp)
+                            ) {
+                                items(uiState.files, key = { it.name + it.modified }) { file ->
+                                    val isSelected = uiState.selectedFiles.contains(file)
+                                    FileItemCard(
+                                        file = file,
+                                        isSelected = isSelected,
+                                        isSelectionMode = uiState.isSelectionMode,
+                                        onClick = {
+                                            if (uiState.isSelectionMode) {
+                                                viewModel.toggleFileSelection(file)
+                                            } else {
+                                                handleFileClick(file, viewModel, context, onImagePreview = onImagePreview)
+                                            }
+                                        },
+                                        onLongClick = {
+                                            if (!uiState.isSelectionMode) {
+                                                viewModel.toggleSelectionMode(true)
+                                                viewModel.toggleFileSelection(file)
+                                            }
+                                        },
+                                        modifier = Modifier.animateItemPlacement()
+                                    )
 
-                                if (file == uiState.files.last() && uiState.hasMore) {
-                                    LaunchedEffect(Unit) {
-                                        viewModel.loadMore()
+                                    if (file == uiState.files.last() && uiState.hasMore) {
+                                        LaunchedEffect(Unit) {
+                                            viewModel.loadMore()
+                                        }
                                     }
                                 }
                             }
@@ -532,10 +574,21 @@ private fun handleFileClick(
     val isText = ext in listOf("txt", "json", "yaml", "yml", "xml", "js", "kt", "md", "ini", "conf", "sh", "bat", "log", "csv")
     val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "flv", "webm")
     val isImage = ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
-    val isDoc = ext in listOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx")
+    val isPdf = ext == "pdf"
+    val isOfficeDoc = ext in listOf("doc", "docx", "xls", "xlsx", "ppt", "pptx")
 
     if (isText) {
         viewModel.loadTextPreview(file)
+        return
+    }
+
+    if (isPdf) {
+        viewModel.loadPdfPreview(file, context.cacheDir)
+        return
+    }
+
+    if (isOfficeDoc) {
+        viewModel.openDocWithExternalApp(file, context)
         return
     }
 
@@ -549,15 +602,10 @@ private fun handleFileClick(
             }
             context.startActivity(Intent.createChooser(intent, "选择播放器"))
         }
-        isDoc -> {
-            val encodedUrl = URLEncoder.encode(directLink, "UTF-8")
-            val previewUrl = "https://view.officeapps.live.com/op/view.aspx?src=$encodedUrl"
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(previewUrl))
-            context.startActivity(intent)
-        }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FileGridItem(
     file: AListFile,
@@ -565,21 +613,16 @@ fun FileGridItem(
     context: android.content.Context,
     onRenameRequest: (AListFile) -> Unit,
     onDeleteRequest: (AListFile) -> Unit,
-    onImagePreview: (String) -> Unit
+    onImagePreview: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val ext = file.name.substringAfterLast('.').lowercase()
-    val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "flv", "webm")
-    val isImage = ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
-
-    val icon = if (file.is_dir) Icons.Rounded.Folder
-    else when {
-        isVideo -> Icons.Rounded.Movie
-        isImage -> Icons.Rounded.Image
-        else -> Icons.Rounded.InsertDriveFile
+    val fileIconInfo = getFileIconAndTint(file)
+    val icon = fileIconInfo.icon
+    val iconTint = if (file.is_dir) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        fileIconInfo.tint
     }
-
-    val iconTint = if (file.is_dir) MaterialTheme.colorScheme.primary
-    else MaterialTheme.colorScheme.onSurfaceVariant
 
     val timeString = try {
         file.modified.substringBefore("T").replace("-", "/") + " " + file.modified.substringAfter("T").take(5)
@@ -590,11 +633,28 @@ fun FileGridItem(
     val sizeString = if (file.is_dir) "" else com.example.alist.ui.components.formatFileSize(file.size)
     val metaText = "$timeString  $sizeString".trim()
 
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.97f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "bounceScale"
+    )
+
     Card(
         onClick = {
             handleFileClick(file, viewModel, context, onImagePreview = onImagePreview)
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            },
+        interactionSource = interactionSource,
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -607,14 +667,77 @@ fun FileGridItem(
                 .padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(MaterialTheme.shapes.small)
-            )
+            val ext = file.name.substringAfterLast('.', "").lowercase()
+            val isImage = !file.is_dir && ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "ico", "heic", "tiff")
+
+            if (isImage) {
+                val thumbUrl = if (file.thumb.isNotBlank()) {
+                    if (file.thumb.startsWith("http://") || file.thumb.startsWith("https://")) {
+                        file.thumb
+                    } else {
+                        val baseUrl = viewModel.uiState.value.currentProfile?.serverUrl?.trimEnd('/')
+                        if (baseUrl != null) {
+                            if (file.thumb.startsWith("/")) "$baseUrl${file.thumb}" else "$baseUrl/${file.thumb}"
+                        } else {
+                            file.thumb
+                        }
+                    }
+                } else {
+                    viewModel.generateDirectLink(file)
+                }
+
+                var imageState by remember { mutableStateOf<AsyncImagePainter.State>(AsyncImagePainter.State.Empty) }
+
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(MaterialTheme.shapes.small),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (thumbUrl != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(thumbUrl)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = file.name,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                            onState = { imageState = it }
+                        )
+                    }
+
+                    if (thumbUrl == null || imageState is AsyncImagePainter.State.Loading || imageState is AsyncImagePainter.State.Empty) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = iconTint.copy(alpha = 0.6f),
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = iconTint,
+                            strokeWidth = 2.dp
+                        )
+                    } else if (imageState is AsyncImagePainter.State.Error) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = iconTint,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(MaterialTheme.shapes.small)
+                )
+            }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = file.name,
