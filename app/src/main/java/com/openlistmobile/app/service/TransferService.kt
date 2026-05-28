@@ -127,8 +127,18 @@ class TransferService : Service() {
         transferTaskDao.update(downloadingTask)
 
         try {
-            val file = File(downloadingTask.savePath)
-            val downloaded = if (file.exists()) file.length() else 0L
+            val isContentUri = downloadingTask.savePath.startsWith("content://")
+            
+            val downloaded = if (isContentUri) {
+                try {
+                    contentResolver.openAssetFileDescriptor(Uri.parse(downloadingTask.savePath), "r")?.length ?: 0L
+                } catch (e: Exception) {
+                    0L
+                }
+            } else {
+                val file = File(downloadingTask.savePath)
+                if (file.exists()) file.length() else 0L
+            }
 
             val requestBuilder = Request.Builder().url(downloadingTask.fileUrl)
             if (downloaded > 0) {
@@ -156,7 +166,14 @@ class TransferService : Service() {
             transferTaskDao.update(currentTask)
 
             body.byteStream().use { input ->
-                FileOutputStream(file, downloaded > 0).use { output ->
+                val outputStream = if (isContentUri) {
+                    contentResolver.openOutputStream(Uri.parse(downloadingTask.savePath), if (downloaded > 0) "wa" else "w")
+                        ?: throw Exception("Could not open output stream for URI")
+                } else {
+                    FileOutputStream(File(downloadingTask.savePath), downloaded > 0)
+                }
+                
+                outputStream.use { output ->
                     val buffer = ByteArray(8 * 1024)
                     var bytesRead: Int
                     var lastUpdateTime = System.currentTimeMillis()

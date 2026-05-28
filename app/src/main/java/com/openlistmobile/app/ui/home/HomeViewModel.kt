@@ -15,6 +15,8 @@ import com.openlistmobile.app.domain.repository.TransferRepository
 import com.openlistmobile.app.service.TransferService
 import com.openlistmobile.app.data.local.TransferType
 import com.openlistmobile.app.utils.ShareManager
+import com.openlistmobile.app.utils.SettingsManager
+import android.net.Uri
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,7 +70,9 @@ data class HomeUiState(
 
     val isSelectionMode: Boolean = false,
     val selectedFiles: Set<AListFile> = emptySet(),
-    val isGridView: Boolean = false
+    val isGridView: Boolean = false,
+    
+    val customDownloadDirPath: String? = null
 )
 
 @HiltViewModel
@@ -76,7 +80,8 @@ class HomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val fileRepository: FileRepository,
     private val transferRepository: TransferRepository,
-    val shareManager: ShareManager
+    val shareManager: ShareManager,
+    private val settingsManager: SettingsManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -85,7 +90,29 @@ class HomeViewModel @Inject constructor(
     private val pathStack = mutableListOf<String>()
     private var fetchJob: Job? = null
 
+    private fun getReadablePathFromUri(uri: Uri): String {
+        val path = uri.path ?: return uri.toString()
+        if (path.startsWith("/tree/")) {
+            val split = path.removePrefix("/tree/").split(":")
+            if (split.size >= 2) {
+                val volume = split[0]
+                val folder = split[1]
+                return if (volume.equals("primary", ignoreCase = true)) {
+                    "内部存储/$folder"
+                } else {
+                    "SD卡($volume)/$folder"
+                }
+            }
+        }
+        return Uri.decode(uri.toString())
+    }
+
     init {
+        val savedUri = settingsManager.downloadDirUri
+        if (savedUri != null) {
+            _uiState.update { it.copy(customDownloadDirPath = getReadablePathFromUri(savedUri)) }
+        }
+
         viewModelScope.launch {
             authRepository.initActiveProfile()
             authRepository.getAllProfiles().collect { profiles ->
@@ -451,11 +478,36 @@ class HomeViewModel @Inject constructor(
     }
 
     // --- Phase 6: Background Download ---
+    fun setDownloadDirectory(uri: Uri, context: Context) {
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        context.contentResolver.takePersistableUriPermission(uri, flags)
+        settingsManager.downloadDirUri = uri
+        _uiState.update { it.copy(customDownloadDirPath = getReadablePathFromUri(uri)) }
+    }
+
     fun startDownload(context: Context, file: AListFile) {
         val url = generateDirectLink(file) ?: return
         viewModelScope.launch {
-            val saveDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
-            val savePath = "$saveDir/${file.name}"
+            val customUri = settingsManager.downloadDirUri
+            var savePath = ""
+            if (customUri != null) {
+                try {
+                    val dirDoc = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, customUri)
+                    if (dirDoc != null && dirDoc.canWrite()) {
+                        val newFile = dirDoc.createFile("*/*", file.name)
+                        if (newFile != null) {
+                            savePath = newFile.uri.toString()
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            if (savePath.isEmpty()) {
+                val saveDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
+                savePath = "$saveDir/${file.name}"
+            }
+            
             val taskId = transferRepository.addTask(file.name, url, savePath)
             
             val intent = Intent(context, TransferService::class.java).apply {

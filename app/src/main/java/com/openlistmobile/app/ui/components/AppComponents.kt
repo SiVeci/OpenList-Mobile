@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.VerticalAlignBottom
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ImportExport
 import androidx.compose.material.icons.rounded.Logout
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -63,6 +64,7 @@ import androidx.compose.ui.unit.sp
 fun HomeTopBar(
     title: String,
     onTransferClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     onLogoutClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -94,6 +96,13 @@ fun HomeTopBar(
             Icon(
                 imageVector = Icons.Rounded.ImportExport,
                 contentDescription = "Transfers",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        BounceIconButton(onClick = onSettingsClick) {
+            Icon(
+                imageVector = Icons.Rounded.Settings,
+                contentDescription = "Settings",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
