@@ -346,6 +346,7 @@ fun FileBrowserView(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        Spacer(modifier = Modifier.height(1.dp))
         // --- Search Bar (Level 1 Tint) ---
         var showSortMenu by remember { mutableStateOf(false) }
         var showFilterMenu by remember { mutableStateOf(false) }
@@ -400,6 +401,7 @@ fun FileBrowserView(
             }
         }
 
+        Spacer(modifier = Modifier.height(1.dp))
         // --- Breadcrumbs (Level 2 Tint) ---
         Surface(color = Color(0xFFFBF9FE)) {
             BreadcrumbNavigation(
