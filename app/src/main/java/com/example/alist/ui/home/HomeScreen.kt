@@ -415,8 +415,6 @@ fun FileBrowserView(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-        ) {
-                .fillMaxWidth()
                 .nestedScroll(pullToRefreshState.nestedScrollConnection)
                 .clipToBounds()
         ) {
