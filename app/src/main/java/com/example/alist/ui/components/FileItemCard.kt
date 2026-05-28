@@ -88,7 +88,7 @@ fun FileItemCard(
             containerColor = if (isSelected) 
                 MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
             else 
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {

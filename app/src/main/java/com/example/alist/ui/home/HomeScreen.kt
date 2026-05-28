@@ -101,11 +101,13 @@ fun HomeScreen(
         },
         topBar = {
             if (uiState.currentProfile != null) {
-                HomeTopBar(
-                    title = uiState.currentProfile?.aliasName?.takeIf { it.isNotBlank() } ?: "ALIST",
-                    onTransferClick = onNavigateToTransfer,
-                    onLogoutClick = { viewModel.logout() }
-                )
+                Surface(color = MaterialTheme.colorScheme.surface) {
+                    HomeTopBar(
+                        title = uiState.currentProfile?.aliasName?.takeIf { it.isNotBlank() } ?: "ALIST",
+                        onTransferClick = onNavigateToTransfer,
+                        onLogoutClick = { viewModel.logout() }
+                    )
+                }
             }
         },
         floatingActionButton = {
@@ -221,7 +223,7 @@ fun HomeScreen(
                 }
             }
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = MaterialTheme.colorScheme.surfaceContainer
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -344,24 +346,26 @@ fun FileBrowserView(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // --- Search Bar ---
+        // --- Search Bar (Level 1 Tint) ---
         var showSortMenu by remember { mutableStateOf(false) }
         var showFilterMenu by remember { mutableStateOf(false) }
 
-        HomeSearchBar(
-            query = uiState.filterSuffix,
-            onQueryChange = { viewModel.updateFilterSuffix(it) },
-            isSelectionMode = uiState.isSelectionMode,
-            isAllSelected = uiState.selectedFiles.size == uiState.files.size && uiState.files.isNotEmpty(),
-            onToggleSelectAll = {
-                if (uiState.selectedFiles.size == uiState.files.size) viewModel.clearSelection()
-                else viewModel.selectAll()
-            },
-            onFilterClick = { showFilterMenu = true },
-            onSortClick = { showSortMenu = true },
-            isGridView = uiState.isGridView,
-            onToggleView = { viewModel.toggleViewMode() }
-        )
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerLowest) {
+            HomeSearchBar(
+                query = uiState.filterSuffix,
+                onQueryChange = { viewModel.updateFilterSuffix(it) },
+                isSelectionMode = uiState.isSelectionMode,
+                isAllSelected = uiState.selectedFiles.size == uiState.files.size && uiState.files.isNotEmpty(),
+                onToggleSelectAll = {
+                    if (uiState.selectedFiles.size == uiState.files.size) viewModel.clearSelection()
+                    else viewModel.selectAll()
+                },
+                onFilterClick = { showFilterMenu = true },
+                onSortClick = { showSortMenu = true },
+                isGridView = uiState.isGridView,
+                onToggleView = { viewModel.toggleViewMode() }
+            )
+        }
 
         Box {
             DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
@@ -396,18 +400,22 @@ fun FileBrowserView(
             }
         }
 
-        // --- Breadcrumbs ---
-        BreadcrumbNavigation(
-            path = uiState.currentPath,
-            onPathClick = { path ->
-                viewModel.fetchFiles(path)
-            }
-        )
+        // --- Breadcrumbs (Level 2 Tint) ---
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+            BreadcrumbNavigation(
+                path = uiState.currentPath,
+                onPathClick = { path ->
+                    viewModel.fetchFiles(path)
+                }
+            )
+        }
 
-        // --- File List ---
+        // --- File List (Level 3 Tint - inherited from Scaffold) ---
         Box(
             modifier = Modifier
                 .weight(1f)
+                .fillMaxWidth()
+        ) {
                 .fillMaxWidth()
                 .nestedScroll(pullToRefreshState.nestedScrollConnection)
                 .clipToBounds()
