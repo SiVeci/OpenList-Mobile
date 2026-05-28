@@ -68,16 +68,16 @@ fun FileItemCard(
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
     }
 
-    // Format: Folder • 2026/5/27 23:26
-    val typeText = if (file.is_dir) "Folder" else ext.uppercase()
+    // Format: Folder • 2026/5/27 23:26 or 32.9 MB • 2026/5/28 08:23
+    val prefixText = if (file.is_dir) "Folder" else formatFileSize(file.size)
     val timeString = try {
         val datePart = file.modified.substringBefore("T").replace("-", "/")
-        val timePart = file.modified.substringAfter("T").substringBeforeLast(":")
+        val timePart = file.modified.substringAfter("T").take(5)
         "$datePart $timePart"
     } catch (e: Exception) {
         file.modified
     }
-    val metaText = "$typeText • $timeString"
+    val metaText = "$prefixText • $timeString"
 
     Card(
         modifier = modifier

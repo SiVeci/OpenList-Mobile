@@ -582,7 +582,7 @@ fun FileGridItem(
     else MaterialTheme.colorScheme.onSurfaceVariant
 
     val timeString = try {
-        file.modified.substringBefore("T") + " " + file.modified.substringAfter("T").substringBeforeLast(":")
+        file.modified.substringBefore("T").replace("-", "/") + " " + file.modified.substringAfter("T").take(5)
     } catch (e: Exception) {
         file.modified
     }
