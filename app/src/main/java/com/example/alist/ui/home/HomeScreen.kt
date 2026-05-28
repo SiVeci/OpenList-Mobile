@@ -101,7 +101,7 @@ fun HomeScreen(
         },
         topBar = {
             if (uiState.currentProfile != null) {
-                Surface(color = Color(0xFFFFFFFF)) {
+                Surface(color = Color(0xFFFDFDFF)) {
                     HomeTopBar(
                         title = uiState.currentProfile?.aliasName?.takeIf { it.isNotBlank() } ?: "ALIST",
                         onTransferClick = onNavigateToTransfer,
@@ -223,7 +223,7 @@ fun HomeScreen(
                 }
             }
         },
-        containerColor = Color(0xFFF3F0FF)
+        containerColor = Color(0xFFF7F2F9)
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -350,7 +350,7 @@ fun FileBrowserView(
         var showSortMenu by remember { mutableStateOf(false) }
         var showFilterMenu by remember { mutableStateOf(false) }
 
-        Surface(color = Color(0xFFFDFBFF)) {
+        Surface(color = Color(0xFFFFFFFF)) {
             HomeSearchBar(
                 query = uiState.filterSuffix,
                 onQueryChange = { viewModel.updateFilterSuffix(it) },
@@ -401,7 +401,7 @@ fun FileBrowserView(
         }
 
         // --- Breadcrumbs (Level 2 Tint) ---
-        Surface(color = Color(0xFFF9F7FF)) {
+        Surface(color = Color(0xFFFBF9FE)) {
             BreadcrumbNavigation(
                 path = uiState.currentPath,
                 onPathClick = { path ->
