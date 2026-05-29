@@ -99,8 +99,10 @@ fun HomeScreen(
         }
     }
 
-    BackHandler(enabled = uiState.currentPath != "/" || uiState.isSelectionMode || previewImageUrl != null || uiState.previewTextContent != null || uiState.isPreviewingTextLoading) {
-        if (previewImageUrl != null) {
+    BackHandler(enabled = uiState.currentPath != "/" || uiState.isSelectionMode || previewImageUrl != null || uiState.previewTextContent != null || uiState.isPreviewingTextLoading || uiState.isSearchActive) {
+        if (uiState.isSearchActive) {
+            viewModel.closeSearch()
+        } else if (previewImageUrl != null) {
             previewImageUrl = null
         } else if (uiState.previewTextContent != null || uiState.isPreviewingTextLoading) {
             viewModel.clearTextPreview()
@@ -448,6 +450,22 @@ fun HomeScreen(
         isAudio = uiState.mediaPlaybackIsAudio,
         onDismiss = { viewModel.clearMediaPlayback() }
     )
+
+    // --- Search Overlay ---
+    if (uiState.isSearchActive) {
+        val context = LocalContext.current
+        com.openlistmobile.app.ui.components.SearchOverlay(
+            uiState = uiState,
+            onQueryChange = viewModel::updateSearchKeywords,
+            onSubmit = viewModel::performSearch,
+            onScopeToggle = viewModel::setSearchScopeGlobal,
+            onTypeFilter = viewModel::updateSearchTypeFilter,
+            onSizeFilter = viewModel::updateSearchSizeFilter,
+            onResultClick = { item -> viewModel.openSearchResult(item, context) { url -> previewImageUrl = url } },
+            onLoadMore = viewModel::loadMoreSearch,
+            onDismiss = viewModel::closeSearch
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -494,6 +512,7 @@ fun FileBrowserView(
                 onSortClick = { showSortMenu = true },
                 isGridView = uiState.isGridView,
                 onToggleView = { viewModel.toggleViewMode() },
+                onGlobalSearchClick = { viewModel.openSearch() },
                 filterMenu = {
                     DropdownMenu(expanded = showFilterMenu, onDismissRequest = { showFilterMenu = false }) {
                         FilterCategory.values().forEach { cat ->

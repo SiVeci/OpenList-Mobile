@@ -166,4 +166,38 @@ class FileRepositoryImpl @Inject constructor(
             inputStream.close()
         }
     }
+
+    override suspend fun search(parent: String, keywords: String, page: Int, perPage: Int): Result<SearchData> = withContext(Dispatchers.IO) {
+        try {
+            val baseUrl = tokenManager.currentServerUrl ?: return@withContext Result.failure(Exception("No active server"))
+            val request = SearchRequest(parent = parent, keywords = keywords, page = page, per_page = perPage)
+            val response = apiService.search("$baseUrl/api/fs/search", request)
+            if (response.code == 200 && response.data != null) {
+                Result.success(response.data)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getFileInfo(path: String): Result<AListFile> = withContext(Dispatchers.IO) {
+        try {
+            val baseUrl = tokenManager.currentServerUrl ?: return@withContext Result.failure(Exception("No active server"))
+            val request = FileListRequest(path = path)
+            val response = apiService.getFileInfo("$baseUrl/api/fs/get", request)
+            if (response.code == 200 && response.data != null) {
+                val d = response.data
+                Result.success(AListFile(
+                    name = d.name, size = d.size, is_dir = d.is_dir,
+                    modified = d.modified, sign = d.sign, thumb = d.thumb, type = d.type
+                ))
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

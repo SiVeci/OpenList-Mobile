@@ -38,4 +38,16 @@ interface AListApiService {
 
     @retrofit2.http.GET
     suspend fun downloadFile(@Url url: String): okhttp3.ResponseBody
+
+    @POST
+    suspend fun search(
+        @Url url: String,
+        @Body request: SearchRequest
+    ): AListResponse<SearchData>
+
+    @POST
+    suspend fun getFileInfo(
+        @Url url: String,
+        @Body request: FileListRequest
+    ): AListResponse<FsGetData>
 }

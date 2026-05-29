@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.List
 import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.outlined.VerticalAlignBottom
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ImportExport
@@ -174,6 +175,7 @@ fun HomeSearchBar(
     onSortClick: () -> Unit,
     isGridView: Boolean,
     onToggleView: () -> Unit,
+    onGlobalSearchClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     filterMenu: @Composable () -> Unit = {},
     sortMenu: @Composable () -> Unit = {}
@@ -248,6 +250,10 @@ fun HomeSearchBar(
             ActionButton(
                 icon = if (isGridView) Icons.Outlined.List else Icons.Outlined.GridView,
                 onClick = onToggleView
+            )
+            ActionButton(
+                icon = Icons.Outlined.TravelExplore,
+                onClick = onGlobalSearchClick
             )
         }
     }

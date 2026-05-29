@@ -54,3 +54,36 @@ data class RemoveRequest(
     val dir: String,
     val names: List<String>
 )
+
+data class SearchRequest(
+    val parent: String,
+    val keywords: String,
+    val scope: Int = 0,
+    val page: Int = 1,
+    val per_page: Int = 100,
+    val password: String = ""
+)
+
+data class SearchResultItem(
+    val parent: String,
+    val name: String,
+    val is_dir: Boolean,
+    val size: Long,
+    val type: Int
+)
+
+data class SearchData(
+    val content: List<SearchResultItem>?,
+    val total: Int
+)
+
+data class FsGetData(
+    val name: String,
+    val size: Long,
+    val is_dir: Boolean,
+    val modified: String = "",
+    val sign: String = "",
+    val thumb: String = "",
+    val type: Int = 0,
+    val raw_url: String = ""
+)

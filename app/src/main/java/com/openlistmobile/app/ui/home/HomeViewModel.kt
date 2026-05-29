@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.openlistmobile.app.data.local.ServerProfile
 import com.openlistmobile.app.data.remote.model.AListFile
+import com.openlistmobile.app.data.remote.model.SearchResultItem
 import com.openlistmobile.app.domain.repository.AuthRepository
 import com.openlistmobile.app.domain.repository.FileRepository
 import com.openlistmobile.app.domain.repository.TransferRepository
@@ -38,6 +39,20 @@ enum class FilterCategory(val label: String) {
 
 enum class SortBy { Name, Size, Time }
 enum class SortOrder { Asc, Desc }
+
+enum class SizeFilter(val label: String) {
+    All("全部大小"),
+    Small("< 10 MB"),
+    Medium("10 MB – 1 GB"),
+    Large("> 1 GB");
+
+    fun matches(size: Long): Boolean = when (this) {
+        All -> true
+        Small -> size < 10L * 1024 * 1024
+        Medium -> size in (10L * 1024 * 1024)..(1024L * 1024 * 1024)
+        Large -> size > 1024L * 1024 * 1024
+    }
+}
 
 data class HomeUiState(
     val profiles: List<ServerProfile> = emptyList(),
@@ -75,8 +90,20 @@ data class HomeUiState(
     val isSelectionMode: Boolean = false,
     val selectedFiles: Set<AListFile> = emptySet(),
     val isGridView: Boolean = false,
-    
-    val customDownloadDirPath: String? = null
+
+    val customDownloadDirPath: String? = null,
+
+    val isSearchActive: Boolean = false,
+    val searchKeywords: String = "",
+    val searchScopeGlobal: Boolean = true,
+    val rawSearchResults: List<SearchResultItem> = emptyList(),
+    val searchResults: List<SearchResultItem> = emptyList(),
+    val searchTypeFilter: FilterCategory = FilterCategory.All,
+    val searchSizeFilter: SizeFilter = SizeFilter.All,
+    val isSearching: Boolean = false,
+    val searchError: String? = null,
+    val searchTotal: Int = 0,
+    val searchPage: Int = 1
 )
 
 @HiltViewModel
@@ -355,8 +382,8 @@ class HomeViewModel @Inject constructor(
     }
 
     // --- Phase 5: Media Preview / Direct Link Generation ---
-    fun loadTextPreview(file: AListFile) {
-        val url = generateDirectLink(file) ?: return
+    fun loadTextPreview(file: AListFile, parentPath: String = _uiState.value.currentPath) {
+        val url = generateDirectLink(file, parentPath) ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isPreviewingTextLoading = true, previewTextFileName = file.name, previewTextContent = null) }
             val result = fileRepository.getTextFileContent(url)
@@ -373,8 +400,8 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(previewTextContent = null, previewTextFileName = null, isPreviewingTextLoading = false) }
     }
 
-    fun loadPdfPreview(file: AListFile, cacheDir: java.io.File) {
-        val url = generateDirectLink(file) ?: return
+    fun loadPdfPreview(file: AListFile, cacheDir: java.io.File, parentPath: String = _uiState.value.currentPath) {
+        val url = generateDirectLink(file, parentPath) ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isPdfLoading = true, pdfPreviewFileName = file.name, pdfPreviewFile = null) }
             val result = fileRepository.downloadFileToCache(url, file.name, cacheDir)
@@ -391,8 +418,8 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(pdfPreviewFile = null, pdfPreviewFileName = null, isPdfLoading = false) }
     }
 
-    fun openDocWithExternalApp(file: AListFile, context: Context) {
-        val url = generateDirectLink(file) ?: return
+    fun openDocWithExternalApp(file: AListFile, context: Context, parentPath: String = _uiState.value.currentPath) {
+        val url = generateDirectLink(file, parentPath) ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isPdfLoading = true, pdfPreviewFileName = file.name) }
             val result = fileRepository.downloadFileToCache(url, file.name, context.cacheDir)
@@ -467,10 +494,9 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun generateDirectLink(file: AListFile): String? {
+    fun generateDirectLink(file: AListFile, parentPath: String = _uiState.value.currentPath): String? {
         val baseUrl = _uiState.value.currentProfile?.serverUrl?.trimEnd('/') ?: return null
-        val current = _uiState.value.currentPath
-        val fullPath = if (current == "/") "/${file.name}" else "$current/${file.name}"
+        val fullPath = if (parentPath == "/") "/${file.name}" else "$parentPath/${file.name}"
         
         val encodedSegments = fullPath.split("/").map {
             if (it.isEmpty()) "" else URLEncoder.encode(it, "UTF-8").replace("+", "%20")
@@ -481,8 +507,8 @@ class HomeViewModel @Inject constructor(
         return "$baseUrl/d$encodedPath$signQuery"
     }
 
-    fun loadMediaPlayback(file: AListFile, isAudio: Boolean) {
-        val url = generateDirectLink(file) ?: return
+    fun loadMediaPlayback(file: AListFile, isAudio: Boolean, parentPath: String = _uiState.value.currentPath) {
+        val url = generateDirectLink(file, parentPath) ?: return
         _uiState.update {
             it.copy(
                 mediaPlaybackUrl = url,
@@ -617,6 +643,165 @@ class HomeViewModel @Inject constructor(
 
         _uiState.update { it.copy(files = sorted) }
     }
+
+    // --- Global Search ---
+
+    fun openSearch() {
+        _uiState.update { it.copy(isSearchActive = true) }
+    }
+
+    fun closeSearch() {
+        _uiState.update {
+            it.copy(
+                isSearchActive = false,
+                searchKeywords = "",
+                rawSearchResults = emptyList(),
+                searchResults = emptyList(),
+                searchTypeFilter = FilterCategory.All,
+                searchSizeFilter = SizeFilter.All,
+                isSearching = false,
+                searchError = null,
+                searchTotal = 0,
+                searchPage = 1
+            )
+        }
+    }
+
+    fun updateSearchKeywords(keywords: String) {
+        _uiState.update { it.copy(searchKeywords = keywords) }
+    }
+
+    fun setSearchScopeGlobal(global: Boolean) {
+        _uiState.update { it.copy(searchScopeGlobal = global) }
+    }
+
+    fun updateSearchTypeFilter(category: FilterCategory) {
+        _uiState.update { it.copy(searchTypeFilter = category) }
+        applySearchFilters()
+    }
+
+    fun updateSearchSizeFilter(sizeFilter: SizeFilter) {
+        _uiState.update { it.copy(searchSizeFilter = sizeFilter) }
+        applySearchFilters()
+    }
+
+    private var searchJob: Job? = null
+
+    fun performSearch() {
+        val keywords = _uiState.value.searchKeywords.trim()
+        if (keywords.isBlank()) return
+
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isSearching = true, searchError = null,
+                    rawSearchResults = emptyList(), searchResults = emptyList(),
+                    searchPage = 1, searchTotal = 0
+                )
+            }
+            val parent = if (_uiState.value.searchScopeGlobal) "/" else _uiState.value.currentPath
+            fileRepository.search(parent, keywords, page = 1, perPage = 100).onSuccess { data ->
+                _uiState.update {
+                    it.copy(
+                        rawSearchResults = data.content ?: emptyList(),
+                        searchTotal = data.total,
+                        isSearching = false
+                    )
+                }
+                applySearchFilters()
+            }.onFailure { e ->
+                _uiState.update { it.copy(isSearching = false, searchError = e.message) }
+            }
+        }
+    }
+
+    fun loadMoreSearch() {
+        val state = _uiState.value
+        if (state.isSearching || state.rawSearchResults.size >= state.searchTotal) return
+
+        searchJob = viewModelScope.launch {
+            val nextPage = state.searchPage + 1
+            _uiState.update { it.copy(isSearching = true, searchPage = nextPage) }
+            val parent = if (state.searchScopeGlobal) "/" else state.currentPath
+            fileRepository.search(parent, state.searchKeywords.trim(), page = nextPage, perPage = 100).onSuccess { data ->
+                val combined = _uiState.value.rawSearchResults + (data.content ?: emptyList())
+                _uiState.update { it.copy(rawSearchResults = combined, isSearching = false) }
+                applySearchFilters()
+            }.onFailure { e ->
+                _uiState.update { it.copy(isSearching = false, searchError = e.message, searchPage = state.searchPage) }
+            }
+        }
+    }
+
+    private fun applySearchFilters() {
+        val state = _uiState.value
+        var filtered = state.rawSearchResults
+
+        if (state.searchTypeFilter != FilterCategory.All) {
+            filtered = filtered.filter { item ->
+                if (item.is_dir) return@filter false
+                val ext = item.name.substringAfterLast('.', "").lowercase()
+                when (state.searchTypeFilter) {
+                    FilterCategory.Video -> ext in listOf("mp4", "mkv", "avi", "mov", "flv", "webm")
+                    FilterCategory.Image -> ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
+                    FilterCategory.Audio -> ext in listOf("mp3", "flac", "wav", "ogg", "m4a")
+                    FilterCategory.Document -> ext in listOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "md")
+                    FilterCategory.Other -> ext !in listOf("mp4", "mkv", "avi", "mov", "flv", "webm", "jpg", "jpeg", "png", "gif", "webp", "bmp", "mp3", "flac", "wav", "ogg", "m4a", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "md")
+                    else -> true
+                }
+            }
+        }
+
+        if (state.searchSizeFilter != SizeFilter.All) {
+            filtered = filtered.filter { state.searchSizeFilter.matches(it.size) }
+        }
+
+        _uiState.update { it.copy(searchResults = filtered) }
+    }
+
+    fun openSearchResult(item: SearchResultItem, context: Context, onImagePreview: (String) -> Unit) {
+        if (item.is_dir) {
+            val fullPath = if (item.parent == "/") "/${item.name}" else "${item.parent}/${item.name}"
+            closeSearch()
+            pathStack.clear()
+            fetchFiles(fullPath)
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSearching = true) }
+            val fullPath = if (item.parent == "/") "/${item.name}" else "${item.parent}/${item.name}"
+            val result = fileRepository.getFileInfo(fullPath)
+            _uiState.update { it.copy(isSearching = false) }
+
+            val info = result.getOrNull() ?: run {
+                _uiState.update { it.copy(searchError = "无法获取文件信息: ${result.exceptionOrNull()?.message}") }
+                return@launch
+            }
+
+            val ext = item.name.substringAfterLast('.', "").lowercase()
+            val isText = ext in listOf("txt", "json", "yaml", "yml", "xml", "js", "kt", "md", "ini", "conf", "sh", "bat", "log", "csv")
+            val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "flv", "webm")
+            val isAudio = ext in listOf("mp3", "wav", "flac", "ogg", "m4a", "aac")
+            val isImage = ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
+            val isPdf = ext == "pdf"
+            val isOfficeDoc = ext in listOf("doc", "docx", "xls", "xlsx", "ppt", "pptx")
+
+            when {
+                isText -> loadTextPreview(info, item.parent)
+                isPdf -> loadPdfPreview(info, context.cacheDir, item.parent)
+                isOfficeDoc -> openDocWithExternalApp(info, context, item.parent)
+                isVideo -> loadMediaPlayback(info, isAudio = false, item.parent)
+                isAudio -> loadMediaPlayback(info, isAudio = true, item.parent)
+                isImage -> {
+                    val link = generateDirectLink(info, item.parent)
+                    if (link != null) onImagePreview(link)
+                }
+            }
+        }
+    }
+
     fun testLoginAndFetch(aliasName: String, serverUrl: String, user: String, pass: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
