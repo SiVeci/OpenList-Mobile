@@ -86,6 +86,31 @@ dependencies {
     // Coil
     implementation("io.coil-kt:coil-compose:2.6.0")
 
+    // Markdown & syntax highlighting
+    val markwon_version = "4.6.2"
+    val prism4j_version = "2.0.0"
+    implementation("io.noties.markwon:core:${markwon_version}") {
+        exclude(group = "org.jetbrains", module = "annotations-java5")
+    }
+    implementation("io.noties.markwon:ext-strikethrough:${markwon_version}") {
+        exclude(group = "org.jetbrains", module = "annotations-java5")
+    }
+    implementation("io.noties.markwon:ext-tables:${markwon_version}") {
+        exclude(group = "org.jetbrains", module = "annotations-java5")
+    }
+    implementation("io.noties.markwon:syntax-highlight:${markwon_version}") {
+        exclude(group = "org.jetbrains", module = "annotations-java5")
+    }
+    implementation("io.noties:prism4j:${prism4j_version}") {
+        exclude(group = "org.jetbrains", module = "annotations-java5")
+    }
+    compileOnly("io.noties:prism4j-bundler:${prism4j_version}") {
+        exclude(group = "org.jetbrains", module = "annotations-java5")
+    }
+    annotationProcessor("io.noties:prism4j-bundler:${prism4j_version}") {
+        exclude(group = "org.jetbrains", module = "annotations-java5")
+    }
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
     

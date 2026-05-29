@@ -685,7 +685,7 @@ private fun handleFileClick(
     }
 
     val ext = file.name.substringAfterLast('.').lowercase()
-    val isText = ext in listOf("txt", "json", "yaml", "yml", "xml", "js", "kt", "md", "ini", "conf", "sh", "bat", "log", "csv")
+    val isText = ext in listOf("txt", "log", "csv", "ini", "conf", "properties", "toml", "json", "yaml", "yml", "xml", "html", "htm", "css", "js", "jsx", "ts", "tsx", "kt", "kts", "java", "py", "sh", "bat", "cmd", "md", "markdown", "sql", "go", "rs", "c", "h", "cpp", "hpp", "cs", "rb", "swift")
     val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "flv", "webm")
     val isAudio = ext in listOf("mp3", "wav", "flac", "ogg", "m4a", "aac")
     val isImage = ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
