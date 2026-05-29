@@ -2,22 +2,25 @@
 .idea/
 *.iml
 *.iws
-
+.codex/
+.agents/
 # 本地环境配置（包含 SDK 路径和私密密钥）
 local.properties
-
 # Gradle 缓存与运行目录
 .gradle/
+.gradle-workspace/
 build/
 */build/
 */release/
-
-# Mac 系统生成的垃圾文件 (如果你或协作者用 Mac)
+# Mac 系统生成的垃圾文件
 .DS_Store
-
 # 签名文件 (如果有的话，千万别传)
 *.jks
 *.keystore
-
 # 各种本地日志
 *.log
+# NDK/C++
+.cxx/
+obj/
+.externalNativeBuild
+captures/
