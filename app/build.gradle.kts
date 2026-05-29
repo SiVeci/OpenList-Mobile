@@ -92,6 +92,12 @@ dependencies {
     // DocumentFile for SAF
     implementation("androidx.documentfile:documentfile:1.0.1")
 
+    // Media3 (ExoPlayer + UI + MediaSession)
+    val media3_version = "1.3.1"
+    implementation("androidx.media3:media3-exoplayer:${media3_version}")
+    implementation("androidx.media3:media3-ui:${media3_version}")
+    implementation("androidx.media3:media3-session:${media3_version}")
+
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")

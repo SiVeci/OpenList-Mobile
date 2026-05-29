@@ -1,7 +1,5 @@
 package com.openlistmobile.app.ui.home
 
-import android.content.Intent
-import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -442,6 +440,14 @@ fun HomeScreen(
         fileName = uiState.pdfPreviewFileName,
         onDismiss = { viewModel.clearPdfPreview() }
     )
+
+    // --- Media Player Overlay ---
+    com.openlistmobile.app.ui.components.MediaPlayerOverlay(
+        url = uiState.mediaPlaybackUrl,
+        fileName = uiState.mediaPlaybackFileName,
+        isAudio = uiState.mediaPlaybackIsAudio,
+        onDismiss = { viewModel.clearMediaPlayback() }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -662,6 +668,7 @@ private fun handleFileClick(
     val ext = file.name.substringAfterLast('.').lowercase()
     val isText = ext in listOf("txt", "json", "yaml", "yml", "xml", "js", "kt", "md", "ini", "conf", "sh", "bat", "log", "csv")
     val isVideo = ext in listOf("mp4", "mkv", "avi", "mov", "flv", "webm")
+    val isAudio = ext in listOf("mp3", "wav", "flac", "ogg", "m4a", "aac")
     val isImage = ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
     val isPdf = ext == "pdf"
     val isOfficeDoc = ext in listOf("doc", "docx", "xls", "xlsx", "ppt", "pptx")
@@ -681,16 +688,20 @@ private fun handleFileClick(
         return
     }
 
+    if (isVideo) {
+        viewModel.loadMediaPlayback(file, isAudio = false)
+        return
+    }
+
+    if (isAudio) {
+        viewModel.loadMediaPlayback(file, isAudio = true)
+        return
+    }
+
     val directLink = viewModel.generateDirectLink(file) ?: return
 
     when {
         isImage -> onImagePreview(directLink)
-        isVideo -> {
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(Uri.parse(directLink), "video/*")
-            }
-            context.startActivity(Intent.createChooser(intent, "选择播放器"))
-        }
     }
 }
 

@@ -68,6 +68,10 @@ data class HomeUiState(
     val pdfPreviewFileName: String? = null,
     val isPdfLoading: Boolean = false,
 
+    val mediaPlaybackUrl: String? = null,
+    val mediaPlaybackFileName: String? = null,
+    val mediaPlaybackIsAudio: Boolean = false,
+
     val isSelectionMode: Boolean = false,
     val selectedFiles: Set<AListFile> = emptySet(),
     val isGridView: Boolean = false,
@@ -475,6 +479,27 @@ class HomeViewModel @Inject constructor(
         
         val signQuery = if (file.sign.isNotBlank()) "?sign=${file.sign}" else ""
         return "$baseUrl/d$encodedPath$signQuery"
+    }
+
+    fun loadMediaPlayback(file: AListFile, isAudio: Boolean) {
+        val url = generateDirectLink(file) ?: return
+        _uiState.update {
+            it.copy(
+                mediaPlaybackUrl = url,
+                mediaPlaybackFileName = file.name,
+                mediaPlaybackIsAudio = isAudio
+            )
+        }
+    }
+
+    fun clearMediaPlayback() {
+        _uiState.update {
+            it.copy(
+                mediaPlaybackUrl = null,
+                mediaPlaybackFileName = null,
+                mediaPlaybackIsAudio = false
+            )
+        }
     }
 
     // --- Phase 6: Background Download ---
