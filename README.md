@@ -24,6 +24,8 @@ OpenList Mobile 是一款基于 Android 平台开发的 AList 客户端应用。
 *   **网络请求**: Retrofit 2.11.0, OkHttp 4.12.0 (附带 Logging Interceptor)
 *   **本地存储**: Room 2.6.1 (SQLite)
 *   **图片加载**: Coil Compose 2.6.0
+*   **媒体播放**: Media3 ExoPlayer 1.3.1
+*   **文本渲染**: Markwon (Markdown 解析), Prism4j (语法高亮)
 *   **并发编程**: Kotlin Coroutines 1.8.0
 *   **系统组件兼容**: AndroidX Core (1.13.1), Lifecycle (2.8.0), DocumentFile (1.0.1)
 
@@ -115,5 +117,5 @@ OpenList Mobile 是一款基于 Android 平台开发的 AList 客户端应用。
 ### 核心功能迭代
 - [x] ~~**内置媒体播放中心**: 集成 `androidx.media3:media3-exoplayer`，实现端内的流媒体视频播放及后台音乐音频播放，彻底解决调用外部播放器时的鉴权失败问题。~~
 - [x] ~~**全局聚合搜索与过滤**: 接入 AList 的 `/api/fs/search` 接口，提供全局跨目录检索能力，并支持按文件类型（图片、视频、文档）、大小等条件进行精确过滤。~~
-- [ ] **高级文本与代码预览器**: 升级当前的 `TextPreviewOverlay`，集成第三方渲染库以优美地渲染 Markdown 格式文本，同时为代码文件（如 `.py`, `.js`, `.json` 等）提供语法高亮和行号显示功能。
+- [x] ~~**高级文本与代码预览器**: 升级当前的 `TextPreviewOverlay`，集成第三方渲染库以优美地渲染 Markdown 格式文本，同时为代码文件（如 `.py`, `.js`, `.json` 等）提供语法高亮和行号显示功能。~~
 - [ ] **指定目录一键同步**: 支持将本地系统文件夹与 AList 指定云端目录进行绑定，通过 Android `WorkManager` 实现后台静默或手动一键同步（支持双向同步或单向备份）。
