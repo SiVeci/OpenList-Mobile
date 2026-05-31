@@ -47,6 +47,7 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ImportExport
 import androidx.compose.material.icons.rounded.Logout
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,6 +65,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun HomeTopBar(
     title: String,
+    onSyncClick: () -> Unit,
     onTransferClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onLogoutClick: () -> Unit,
@@ -93,6 +95,13 @@ fun HomeTopBar(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f)
         )
+        BounceIconButton(onClick = onSyncClick) {
+            Icon(
+                imageVector = Icons.Rounded.Sync,
+                contentDescription = "Sync",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         BounceIconButton(onClick = onTransferClick) {
             Icon(
                 imageVector = Icons.Rounded.ImportExport,

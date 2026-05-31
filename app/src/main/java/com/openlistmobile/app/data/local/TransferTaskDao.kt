@@ -12,6 +12,9 @@ interface TransferTaskDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(task: TransferTask): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(tasks: List<TransferTask>): List<Long>
+
     @Update
     suspend fun update(task: TransferTask)
 

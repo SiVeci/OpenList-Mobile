@@ -140,7 +140,8 @@ class TransferService : Service() {
                 if (file.exists()) file.length() else 0L
             }
 
-            val requestBuilder = Request.Builder().url(downloadingTask.fileUrl)
+            val requestBuilder = Request.Builder()
+                .url(downloadingTask.fileUrl)
             if (downloaded > 0) {
                 requestBuilder.addHeader("Range", "bytes=$downloaded-")
             }
@@ -160,7 +161,9 @@ class TransferService : Service() {
 
             val body = response.body ?: throw Exception("Empty body")
             val contentLength = body.contentLength()
-            val total = if (downloaded > 0) downloaded + contentLength else contentLength
+            val headerTotal = if (downloaded > 0) downloaded + contentLength else contentLength
+            // 优先信任入队时写入的云端权威总长；仅当其 <=0 时才用响应头推算
+            val total = if (downloadingTask.totalBytes > 0) downloadingTask.totalBytes else headerTotal
 
             var currentTask = downloadingTask.copy(totalBytes = total, downloadedBytes = downloaded)
             transferTaskDao.update(currentTask)

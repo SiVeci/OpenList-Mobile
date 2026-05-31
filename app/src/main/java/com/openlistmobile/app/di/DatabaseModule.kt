@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.openlistmobile.app.data.local.AppDatabase
 import com.openlistmobile.app.data.local.DirectoryCacheDao
 import com.openlistmobile.app.data.local.ServerProfileDao
+import com.openlistmobile.app.data.local.SyncRuleDao
 import com.openlistmobile.app.data.local.TransferTaskDao
 import dagger.Module
 import dagger.Provides
@@ -24,7 +25,7 @@ object DatabaseModule {
             AppDatabase::class.java,
             "alist_database"
         )
-            .addMigrations(AppDatabase.MIGRATION_4_5)
+            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
             .fallbackToDestructiveMigration()
             .build()
     }
@@ -42,5 +43,10 @@ object DatabaseModule {
     @Provides
     fun provideTransferTaskDao(database: AppDatabase): TransferTaskDao {
         return database.transferTaskDao()
+    }
+
+    @Provides
+    fun provideSyncRuleDao(database: AppDatabase): SyncRuleDao {
+        return database.syncRuleDao()
     }
 }

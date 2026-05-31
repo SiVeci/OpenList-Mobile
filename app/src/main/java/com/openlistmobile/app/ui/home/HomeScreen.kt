@@ -71,6 +71,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
+    onNavigateToSync: () -> Unit,
     onNavigateToTransfer: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
@@ -124,6 +125,7 @@ fun HomeScreen(
                 Surface(color = Color(0xFFFDFDFF)) {
                     HomeTopBar(
                         title = uiState.currentProfile?.aliasName?.takeIf { it.isNotBlank() } ?: "ALIST",
+                        onSyncClick = onNavigateToSync,
                         onTransferClick = onNavigateToTransfer,
                         onSettingsClick = { showSettingsDialog = true },
                         onLogoutClick = { viewModel.logout() }

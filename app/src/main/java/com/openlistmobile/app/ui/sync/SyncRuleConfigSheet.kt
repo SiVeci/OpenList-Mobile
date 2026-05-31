@@ -1,0 +1,249 @@
+package com.openlistmobile.app.ui.sync
+
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import com.openlistmobile.app.data.local.ConflictStrategy
+import com.openlistmobile.app.data.local.SyncMode
+import com.openlistmobile.app.data.local.SyncRule
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SyncRuleConfigSheet(
+    existingRule: SyncRule? = null,
+    onDismiss: () -> Unit,
+    onCreate: (SyncRule, onResult: (Result<Long>) -> Unit) -> Unit,
+    onUpdate: (SyncRule, onResult: (Result<Unit>) -> Unit) -> Unit = { _, _ -> }
+) {
+    val context = LocalContext.current
+    val isEdit = existingRule != null
+
+    var remotePath by remember { mutableStateOf(existingRule?.remotePath ?: "") }
+    var localUri by remember { mutableStateOf(existingRule?.localUri ?: "") }
+    var ruleName by remember { mutableStateOf(existingRule?.ruleName ?: "") }
+    var syncMode by remember { mutableStateOf(existingRule?.syncMode ?: SyncMode.TWO_WAY) }
+    var mirrorDelete by remember { mutableStateOf(existingRule?.isMirrorDeleteEnabled ?: false) }
+    var conflictStrategy by remember { mutableStateOf(existingRule?.conflictStrategy ?: ConflictStrategy.NEWEST_WINS) }
+    var ignoreTime by remember { mutableStateOf(existingRule?.ignoreModifiedTime ?: false) }
+    var showCloudPicker by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    val dirPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            try {
+                context.contentResolver.takePersistableUriPermission(uri, flags)
+            } catch (_: Exception) {
+            }
+            localUri = uri.toString()
+            if (ruleName.isBlank()) ruleName = readableLocalName(uri)
+        }
+    }
+
+    if (showCloudPicker) {
+        CloudDirPickerDialog(
+            initialPath = remotePath.ifBlank { "/" },
+            onDismiss = { showCloudPicker = false },
+            onConfirm = { path ->
+                remotePath = path
+                showCloudPicker = false
+            }
+        )
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            Text(if (isEdit) "编辑同步规则" else "新建同步规则", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = ruleName,
+                onValueChange = { ruleName = it },
+                label = { Text("规则名称") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(12.dp))
+            Text("目录映射", style = MaterialTheme.typography.titleSmall)
+
+            OutlinedTextField(
+                value = remotePath,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("云端目录") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            if (!isEdit) {
+                OutlinedButton(onClick = { showCloudPicker = true }, modifier = Modifier.padding(top = 4.dp)) {
+                    Text("选择云端目录")
+                }
+            }
+
+            OutlinedTextField(
+                value = localUri,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("本地目录") },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            )
+            if (!isEdit) {
+                OutlinedButton(onClick = { dirPicker.launch(null) }, modifier = Modifier.padding(top = 4.dp)) {
+                    Text("选择本地目录 (SAF)")
+                }
+            } else {
+                Text(
+                    "基于1对1安全映射规则，路径不可更改，需删除规则后重建。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Text("同步模式", style = MaterialTheme.typography.titleSmall)
+            RuleRadio("云端 ➔ 本地（下载）", syncMode == SyncMode.DOWNLOAD_ONLY) { syncMode = SyncMode.DOWNLOAD_ONLY }
+            RuleRadio("本地 ➔ 云端（上传）", syncMode == SyncMode.UPLOAD_ONLY) { syncMode = SyncMode.UPLOAD_ONLY }
+            RuleRadio("双向同步", syncMode == SyncMode.TWO_WAY) { syncMode = SyncMode.TWO_WAY }
+
+            // 镜像删除仅单向模式可用
+            if (syncMode != SyncMode.TWO_WAY) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { mirrorDelete = !mirrorDelete }) {
+                    Checkbox(checked = mirrorDelete, onCheckedChange = { mirrorDelete = it })
+                    Text(
+                        if (syncMode == SyncMode.DOWNLOAD_ONLY) "镜像模式：删除本地多余文件（危险）"
+                        else "镜像模式：删除云端多余文件（危险）",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            if (syncMode == SyncMode.TWO_WAY) {
+                Spacer(Modifier.height(8.dp))
+                Text("冲突处理策略", style = MaterialTheme.typography.titleSmall)
+                RuleRadio("以最新修改时间为准", conflictStrategy == ConflictStrategy.NEWEST_WINS) { conflictStrategy = ConflictStrategy.NEWEST_WINS }
+                RuleRadio("跳过冲突文件", conflictStrategy == ConflictStrategy.SKIP) { conflictStrategy = ConflictStrategy.SKIP }
+                RuleRadio("始终以云端为准", conflictStrategy == ConflictStrategy.CLOUD_WINS) { conflictStrategy = ConflictStrategy.CLOUD_WINS }
+                RuleRadio("始终以本地为准", conflictStrategy == ConflictStrategy.LOCAL_WINS) { conflictStrategy = ConflictStrategy.LOCAL_WINS }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(checked = ignoreTime, onCheckedChange = { ignoreTime = it })
+                Text("仅对比文件大小，忽略修改时间", modifier = Modifier.padding(start = 8.dp))
+            }
+
+            Text(
+                "定时自动同步与网络约束本期暂未启用（手动同步）。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+
+            errorMsg?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(onClick = onDismiss) { Text("取消") }
+                Button(onClick = {
+                    when {
+                        remotePath.isBlank() -> errorMsg = "请选择云端目录"
+                        localUri.isBlank() -> errorMsg = "请选择本地目录"
+                        isEdit -> {
+                            val updated = existingRule!!.copy(
+                                ruleName = ruleName.ifBlank { "未命名规则" },
+                                syncMode = syncMode,
+                                isMirrorDeleteEnabled = mirrorDelete && syncMode != SyncMode.TWO_WAY,
+                                conflictStrategy = conflictStrategy,
+                                ignoreModifiedTime = ignoreTime
+                            )
+                            onUpdate(updated) { result ->
+                                result.fold(
+                                    onSuccess = { onDismiss() },
+                                    onFailure = { e -> errorMsg = e.message }
+                                )
+                            }
+                        }
+                        else -> {
+                            val rule = SyncRule(
+                                profileId = 0, // ViewModel 注入
+                                ruleName = ruleName.ifBlank { "未命名规则" },
+                                remotePath = remotePath,
+                                localUri = localUri,
+                                syncMode = syncMode,
+                                isMirrorDeleteEnabled = mirrorDelete && syncMode != SyncMode.TWO_WAY,
+                                conflictStrategy = conflictStrategy,
+                                ignoreModifiedTime = ignoreTime
+                            )
+                            onCreate(rule) { result ->
+                                result.fold(
+                                    onSuccess = { onDismiss() },
+                                    onFailure = { e -> errorMsg = e.message }
+                                )
+                            }
+                        }
+                    }
+                }) { Text("保存") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RuleRadio(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().clickable { onClick() }
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/** 从 SAF tree uri 提取一个可读的目录名作为默认规则名。 */
+private fun readableLocalName(uri: Uri): String {
+    val path = uri.path ?: return "同步规则"
+    val seg = path.substringAfterLast(":").substringAfterLast("/")
+    return seg.ifBlank { "同步规则" }
+}

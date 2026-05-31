@@ -19,6 +19,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.tween
 import com.openlistmobile.app.ui.home.HomeScreen
 import com.openlistmobile.app.ui.theme.OpenListTheme
+import com.openlistmobile.app.ui.sync.SyncScreen
 import com.openlistmobile.app.ui.transfer.TransferScreen
 import com.openlistmobile.app.utils.ShareManager
 import dagger.hilt.android.AndroidEntryPoint
@@ -71,10 +72,16 @@ class MainActivity : ComponentActivity() {
                         }
                     ) {
                         composable("home") {
-                            HomeScreen(onNavigateToTransfer = { navController.navigate("transfer") })
+                            HomeScreen(
+                                onNavigateToSync = { navController.navigate("sync") },
+                                onNavigateToTransfer = { navController.navigate("transfer") }
+                            )
                         }
                         composable("transfer") {
                             TransferScreen(onNavigateBack = { navController.popBackStack() })
+                        }
+                        composable("sync") {
+                            SyncScreen(onNavigateBack = { navController.popBackStack() })
                         }
                     }
                 }

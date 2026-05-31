@@ -15,6 +15,7 @@ import com.openlistmobile.app.domain.repository.FileRepository
 import com.openlistmobile.app.domain.repository.TransferRepository
 import com.openlistmobile.app.service.TransferService
 import com.openlistmobile.app.data.local.TransferType
+import com.openlistmobile.app.utils.RemoteLinkBuilder
 import com.openlistmobile.app.utils.ShareManager
 import com.openlistmobile.app.utils.SettingsManager
 import android.net.Uri
@@ -25,7 +26,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.net.URLEncoder
 import javax.inject.Inject
 
 enum class FilterCategory(val label: String) {
@@ -495,16 +495,9 @@ class HomeViewModel @Inject constructor(
     }
 
     fun generateDirectLink(file: AListFile, parentPath: String = _uiState.value.currentPath): String? {
-        val baseUrl = _uiState.value.currentProfile?.serverUrl?.trimEnd('/') ?: return null
+        val baseUrl = _uiState.value.currentProfile?.serverUrl ?: return null
         val fullPath = if (parentPath == "/") "/${file.name}" else "$parentPath/${file.name}"
-        
-        val encodedSegments = fullPath.split("/").map {
-            if (it.isEmpty()) "" else URLEncoder.encode(it, "UTF-8").replace("+", "%20")
-        }
-        val encodedPath = encodedSegments.joinToString("/")
-        
-        val signQuery = if (file.sign.isNotBlank()) "?sign=${file.sign}" else ""
-        return "$baseUrl/d$encodedPath$signQuery"
+        return RemoteLinkBuilder.build(baseUrl, fullPath, file.sign)
     }
 
     fun loadMediaPlayback(file: AListFile, isAudio: Boolean, parentPath: String = _uiState.value.currentPath) {

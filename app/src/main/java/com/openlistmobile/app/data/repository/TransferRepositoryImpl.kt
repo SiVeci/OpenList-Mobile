@@ -29,6 +29,10 @@ class TransferRepositoryImpl @Inject constructor(
         dao.insert(task)
     }
 
+    override suspend fun addTasks(tasks: List<TransferTask>): List<Long> = withContext(Dispatchers.IO) {
+        dao.insertAll(tasks)
+    }
+
     override suspend fun updateTask(task: TransferTask) = withContext(Dispatchers.IO) {
         dao.update(task)
     }
