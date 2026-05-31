@@ -2,7 +2,7 @@
   <img src="app/src/main/res/mipmap-xxhdpi/ic_launcher.webp" width="100" />
   <h1>OpenList Mobile</h1>
   <p>
-    <img src="https://img.shields.io/badge/Version-v1.1.0-blue" alt="Version">
+    <img src="https://img.shields.io/badge/Version-v1.2.0-blue" alt="Version">
     <img src="https://img.shields.io/badge/Platform-Android%208.0%2B-brightgreen" alt="Platform">
     <img src="https://img.shields.io/badge/Language-Kotlin%201.9.23-blue" alt="Language">
     <img src="https://img.shields.io/badge/Framework-Compose%20%7C%20Hilt-orange" alt="Framework">
