@@ -2,15 +2,15 @@ package com.openlistmobile.app.domain.repository
 
 import com.openlistmobile.app.data.local.SyncRule
 import com.openlistmobile.app.data.local.SyncStatus
-import com.openlistmobile.app.data.remote.model.AListFile
 import com.openlistmobile.app.domain.sync.DiffReport
-import com.openlistmobile.app.domain.sync.LocalEntry
+import com.openlistmobile.app.domain.sync.LocalNode
+import com.openlistmobile.app.domain.sync.RemoteNode
 import kotlinx.coroutines.flow.Flow
 
-/** 选中规则两端单层目录内容，供双栏 UI 展示。 */
+/** 选中规则两端递归扁平文件内容（含相对路径），供双栏 UI 展示。 */
 data class SideContents(
-    val cloud: List<AListFile>,
-    val local: List<LocalEntry>
+    val cloud: List<RemoteNode>,
+    val local: List<LocalNode>
 )
 
 interface SyncRepository {

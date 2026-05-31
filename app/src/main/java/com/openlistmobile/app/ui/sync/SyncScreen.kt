@@ -248,8 +248,8 @@ private fun CloudPane(state: SyncUiState, modifier: Modifier) {
             Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                items(state.cloudFiles, key = { it.name }) { f ->
-                    FileRow(name = f.name, isDir = f.is_dir, size = f.size, badge = state.cloudBadges[f.name])
+                items(state.cloudFiles, key = { it.relativePath }) { f ->
+                    FileRow(displayPath = f.relativePath, size = f.size, badge = state.cloudBadges[f.relativePath])
                 }
             }
         }
@@ -265,8 +265,8 @@ private fun LocalPane(state: SyncUiState, modifier: Modifier) {
             Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                items(state.localEntries, key = { it.name }) { f ->
-                    FileRow(name = f.name, isDir = f.isDir, size = f.size, badge = state.localBadges[f.name])
+                items(state.localEntries, key = { it.relativePath }) { f ->
+                    FileRow(displayPath = f.relativePath, size = f.size, badge = state.localBadges[f.relativePath])
                 }
             }
         }
@@ -274,17 +274,17 @@ private fun LocalPane(state: SyncUiState, modifier: Modifier) {
 }
 
 @Composable
-private fun FileRow(name: String, isDir: Boolean, size: Long, badge: SyncBadge?) {
+private fun FileRow(displayPath: String, size: Long, badge: SyncBadge?) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Icon(
-            if (isDir) Icons.Rounded.Folder else Icons.Rounded.InsertDriveFile,
+            Icons.Rounded.InsertDriveFile,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(20.dp)
         )
         Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
-            Text(name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (!isDir) Text(formatBytes(size), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(displayPath, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(formatBytes(size), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         badge?.let { BadgeChip(it) }
     }

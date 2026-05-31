@@ -6,11 +6,11 @@ import com.openlistmobile.app.data.local.SyncMode
 import com.openlistmobile.app.data.local.SyncRule
 import com.openlistmobile.app.data.local.SyncStatus
 import com.openlistmobile.app.data.local.TransferStatus
-import com.openlistmobile.app.data.remote.model.AListFile
 import com.openlistmobile.app.domain.repository.SyncRepository
 import com.openlistmobile.app.domain.repository.TransferRepository
 import com.openlistmobile.app.domain.sync.DiffReport
-import com.openlistmobile.app.domain.sync.LocalEntry
+import com.openlistmobile.app.domain.sync.LocalNode
+import com.openlistmobile.app.domain.sync.RemoteNode
 import com.openlistmobile.app.utils.SettingsManager
 import com.openlistmobile.app.utils.TokenManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -28,10 +28,10 @@ data class SyncUiState(
     val rules: List<SyncRule> = emptyList(),
     val selectedRule: SyncRule? = null,
 
-    val cloudFiles: List<AListFile> = emptyList(),
-    val localEntries: List<LocalEntry> = emptyList(),
-    val cloudBadges: Map<String, SyncBadge> = emptyMap(),
-    val localBadges: Map<String, SyncBadge> = emptyMap(),
+    val cloudFiles: List<RemoteNode> = emptyList(),
+    val localEntries: List<LocalNode> = emptyList(),
+    val cloudBadges: Map<String, SyncBadge> = emptyMap(), // 键=relativePath
+    val localBadges: Map<String, SyncBadge> = emptyMap(), // 键=relativePath
 
     val lastDiff: DiffReport? = null,
     val pendingConfirm: DiffReport? = null, // 非空时显示确认弹窗
@@ -95,9 +95,16 @@ class SyncViewModel @Inject constructor(
                         syncStatus = if (allFinished) SyncStatus.IDLE else it.syncStatus
                     )
                 }
+                // 上升沿：本次任务由未完成→全部完成时，刷新一次双栏文件列表
+                if (allFinished && !lastAllFinished) {
+                    _uiState.value.selectedRule?.let { loadSides(it) }
+                }
+                lastAllFinished = allFinished
             }
         }
     }
+
+    private var lastAllFinished = false
 
     fun selectRule(rule: SyncRule) {
         if (_uiState.value.selectedRule?.id == rule.id) return
@@ -189,6 +196,7 @@ class SyncViewModel @Inject constructor(
             if (diff.hasTransfers) {
                 val ids = syncRepository.enqueueDiff(rule, diff)
                 enqueuedIds = enqueuedIds + ids
+                lastAllFinished = false // 新任务入队，重置完成上升沿标记
                 syncRepository.startTransferEngine()
                 _uiState.update { it.copy(message = "已入队 ${ids.size} 个传输任务") }
             } else {
@@ -197,9 +205,12 @@ class SyncViewModel @Inject constructor(
             }
 
             syncRepository.updateRuleStatus(rule.id, SyncStatus.IDLE)
-            // 执行后复位预览态并刷新两端内容
+            // 复位预览态；文件列表的刷新交给 observeProgress 在传输全部完成后触发
             _uiState.update { it.copy(previewReady = false, cloudBadges = emptyMap(), localBadges = emptyMap(), lastDiff = null) }
-            loadSides(rule)
+            if (!diff.hasTransfers) {
+                // 仅删除、无传输：传输不会触发完成回调，这里直接刷新
+                loadSides(rule)
+            }
         }
     }
 
@@ -230,9 +241,18 @@ class SyncViewModel @Inject constructor(
     fun updateRule(rule: SyncRule, onResult: (Result<Unit>) -> Unit) {
         viewModelScope.launch {
             val result = syncRepository.updateRule(rule)
-            // 若编辑的是当前选中规则，更新选中态以即时反映行为变化
+            // 若编辑的是当前选中规则：更新选中态，并清除旧预览（模式/策略可能已变），重载双栏
             if (result.isSuccess && _uiState.value.selectedRule?.id == rule.id) {
-                _uiState.update { it.copy(selectedRule = rule) }
+                _uiState.update {
+                    it.copy(
+                        selectedRule = rule,
+                        previewReady = false,
+                        lastDiff = null,
+                        cloudBadges = emptyMap(),
+                        localBadges = emptyMap()
+                    )
+                }
+                loadSides(rule)
             }
             onResult(result)
         }
@@ -249,18 +269,17 @@ class SyncViewModel @Inject constructor(
     private fun buildBadges(diff: DiffReport): Pair<Map<String, SyncBadge>, Map<String, SyncBadge>> {
         val cloud = mutableMapOf<String, SyncBadge>()
         val local = mutableMapOf<String, SyncBadge>()
-        // 下载：云端有→将拉到本地。云端栏标“云端新增/覆盖”，本地栏将出现
         diff.toDownload.forEach {
-            cloud[it.name] = if (it.reason.contains("覆盖") || it.reason.contains("冲突")) SyncBadge.OVERWRITE else SyncBadge.CLOUD_NEW
+            cloud[it.relativePath] = if (it.reason.contains("覆盖") || it.reason.contains("冲突")) SyncBadge.OVERWRITE else SyncBadge.CLOUD_NEW
         }
         diff.toUpload.forEach {
-            local[it.name] = if (it.reason.contains("覆盖") || it.reason.contains("冲突")) SyncBadge.OVERWRITE else SyncBadge.LOCAL_NEW
+            local[it.relativePath] = if (it.reason.contains("覆盖") || it.reason.contains("冲突")) SyncBadge.OVERWRITE else SyncBadge.LOCAL_NEW
         }
-        diff.toDeleteLocal.forEach { local[it.name] = SyncBadge.DELETE }
-        diff.toDeleteRemote.forEach { cloud[it.name] = SyncBadge.DELETE }
+        diff.toDeleteLocal.forEach { local[it.relativePath] = SyncBadge.DELETE }
+        diff.toDeleteRemote.forEach { cloud[it.relativePath] = SyncBadge.DELETE }
         diff.skipped.forEach {
-            if (!cloud.containsKey(it.name)) cloud[it.name] = SyncBadge.SKIP
-            if (!local.containsKey(it.name)) local[it.name] = SyncBadge.SKIP
+            if (!cloud.containsKey(it.relativePath)) cloud[it.relativePath] = SyncBadge.SKIP
+            if (!local.containsKey(it.relativePath)) local[it.relativePath] = SyncBadge.SKIP
         }
         return cloud to local
     }

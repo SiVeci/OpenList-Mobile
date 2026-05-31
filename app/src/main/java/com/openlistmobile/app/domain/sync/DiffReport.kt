@@ -9,6 +9,7 @@ package com.openlistmobile.app.domain.sync
 data class SyncItem(
     val name: String,
     val size: Long,
+    val relativePath: String = "",
     val remoteFullPath: String? = null,
     val remoteSign: String? = null,
     val localUri: String? = null,
