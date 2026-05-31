@@ -11,7 +11,7 @@
 
 ## 系统摘要 (Overview)
 
-OpenList Mobile 是一款基于 Android 平台开发的 AList 客户端应用。其核心业务逻辑为通过 AList API 与服务器建立连接，实现跨设备的文件系统挂载、目录浏览以及文件的上传和下载。该应用支持通过 Android Storage Access Framework (SAF) 提供文档提供程序（DocumentsProvider）接口，允许系统资源管理器及第三方应用直接访问 AList 挂载的文件数据。项目配置的最低系统版本为 Android 8.0 (API Level 26)，目标编译版本为 Android 15 (API Level 35/36)。
+OpenList Mobile 是一款基于 Android 平台开发的 AList 客户端应用。其核心业务逻辑为通过 AList API 与服务器建立连接，实现跨设备的文件系统挂载、目录浏览、文件的上传与下载，以及云端与本地设备的目录同步。该应用支持通过 Android Storage Access Framework (SAF) 提供文档提供程序（DocumentsProvider）接口，允许系统资源管理器及第三方应用直接访问 AList 挂载的文件数据。项目配置的最低系统版本为 Android 8.0 (API Level 26)，目标编译版本为 Android 15 (API Level 35/36)。
 
 ## 技术栈与依赖 (Technology Stack & Dependencies)
 
@@ -33,11 +33,11 @@ OpenList Mobile 是一款基于 Android 平台开发的 AList 客户端应用。
 
 应用采用分层架构模式，遵循单向数据流 (Unidirectional Data Flow) 与 MVVM (Model-View-ViewModel) 架构规范：
 
-*   **UI 层**: 基于 Jetpack Compose 构建声明式 UI。由 `NavHost` 统一管理 `HomeScreen` 与 `TransferScreen` 的路由及转场动画。页面状态由 `HomeViewModel` 和 `TransferViewModel` 承载，处理用户意图 (Intent) 并将业务逻辑结果映射为 UI State。
-*   **Domain 层**: 定义具体的业务抽象，例如 `AuthRepository`、`FileRepository` 与 `TransferRepository`。
+*   **UI 层**: 基于 Jetpack Compose 构建声明式 UI。由 `NavHost` 统一管理 `HomeScreen`、`TransferScreen` 与 `SyncScreen` 的路由及转场动画。页面状态由 `HomeViewModel`、`TransferViewModel` 及 `SyncViewModel` 承载，处理用户意图 (Intent) 并将业务逻辑结果映射为 UI State。
+*   **Domain 层**: 定义具体的业务抽象，例如 `AuthRepository`、`FileRepository`、`TransferRepository` 与 `SyncRepository`。包含用于计算目录差异的 `DiffEngine`。
 *   **Data 层**: 
     *   **远程数据**: 通过 `AListApiService` 定义的 Retrofit 接口与服务器进行 HTTP 通信。
-    *   **本地数据**: 利用 Room 数据库维护状态，涵盖缓存目录信息 (`DirectoryCache`)、上传/下载任务队列 (`TransferTask`) 和服务端点配置 (`ServerProfile`)。
+    *   **本地数据**: 利用 Room 数据库维护状态，涵盖缓存目录信息 (`DirectoryCache`)、上传/下载任务队列 (`TransferTask`)、同步规则 (`SyncRule`) 和服务端点配置 (`ServerProfile`)。
 *   **核心服务与组件**:
     *   `TransferService`: 基于 `Service` (Foreground Service Type: `dataSync`) 执行后台文件读写及传输任务，并实时更新通知栏状态。
     *   `AListDocumentsProvider`: 继承 Android 标准组件 `DocumentsProvider`，将服务端文件结构适配并暴露给 Android 系统层。
@@ -118,4 +118,5 @@ OpenList Mobile 是一款基于 Android 平台开发的 AList 客户端应用。
 - [x] ~~**内置媒体播放中心**: 集成 `androidx.media3:media3-exoplayer`，实现端内的流媒体视频播放及后台音乐音频播放，彻底解决调用外部播放器时的鉴权失败问题。~~
 - [x] ~~**全局聚合搜索与过滤**: 接入 AList 的 `/api/fs/search` 接口，提供全局跨目录检索能力，并支持按文件类型（图片、视频、文档）、大小等条件进行精确过滤。~~
 - [x] ~~**高级文本与代码预览器**: 升级当前的 `TextPreviewOverlay`，集成第三方渲染库以优美地渲染 Markdown 格式文本，同时为代码文件（如 `.py`, `.js`, `.json` 等）提供语法高亮和行号显示功能。~~
-- [ ] **指定目录一键同步**: 支持将本地系统文件夹与 AList 指定云端目录进行绑定，通过 Android `WorkManager` 实现后台静默或手动一键同步（支持双向同步或单向备份）。
+- [x] ~~**指定目录一键同步**: 支持将本地系统文件夹与 AList 指定云端目录进行绑定，通过 Android `WorkManager` 实现后台静默或手动一键同步（支持双向同步或单向备份）。~~
+- [-] **自动同步**: 实现后台定时静默同步
