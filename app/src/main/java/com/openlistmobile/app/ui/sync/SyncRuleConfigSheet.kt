@@ -23,6 +23,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,10 +34,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import com.openlistmobile.app.data.local.ConflictStrategy
 import com.openlistmobile.app.data.local.SyncMode
 import com.openlistmobile.app.data.local.SyncRule
+import com.openlistmobile.app.ui.components.clearFocusOnTap
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,6 +50,7 @@ fun SyncRuleConfigSheet(
     onUpdate: (SyncRule, onResult: (Result<Unit>) -> Unit) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val isEdit = existingRule != null
 
     var remotePath by remember { mutableStateOf(existingRule?.remotePath ?: "") }
@@ -88,6 +92,7 @@ fun SyncRuleConfigSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .clearFocusOnTap()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 32.dp)
@@ -106,28 +111,36 @@ fun SyncRuleConfigSheet(
             Spacer(Modifier.height(12.dp))
             Text("目录映射", style = MaterialTheme.typography.titleSmall)
 
-            OutlinedTextField(
+            ReadOnlyPathField(
+                label = "云端目录",
                 value = remotePath,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("云端目录") },
                 modifier = Modifier.fillMaxWidth()
             )
             if (!isEdit) {
-                OutlinedButton(onClick = { showCloudPicker = true }, modifier = Modifier.padding(top = 4.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        focusManager.clearFocus(force = true)
+                        showCloudPicker = true
+                    },
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
                     Text("选择云端目录")
                 }
             }
 
-            OutlinedTextField(
+            ReadOnlyPathField(
+                label = "本地目录",
                 value = localUri,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("本地目录") },
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
             )
             if (!isEdit) {
-                OutlinedButton(onClick = { dirPicker.launch(null) }, modifier = Modifier.padding(top = 4.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        focusManager.clearFocus(force = true)
+                        dirPicker.launch(null)
+                    },
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
                     Text("选择本地目录 (SAF)")
                 }
             } else {
@@ -185,8 +198,12 @@ fun SyncRuleConfigSheet(
 
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = onDismiss) { Text("取消") }
+                OutlinedButton(onClick = {
+                    focusManager.clearFocus(force = true)
+                    onDismiss()
+                }) { Text("取消") }
                 Button(onClick = {
+                    focusManager.clearFocus(force = true)
                     when {
                         remotePath.isBlank() -> errorMsg = "请选择云端目录"
                         localUri.isBlank() -> errorMsg = "请选择本地目录"
@@ -226,6 +243,33 @@ fun SyncRuleConfigSheet(
                     }
                 }) { Text("保存") }
             }
+        }
+    }
+}
+
+@Composable
+private fun ReadOnlyPathField(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = MaterialTheme.shapes.small,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+        ) {
+            Text(
+                text = value.ifBlank { "未选择" },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+            )
         }
     }
 }

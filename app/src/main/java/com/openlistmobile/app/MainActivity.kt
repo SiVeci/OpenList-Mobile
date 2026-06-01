@@ -18,6 +18,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.tween
 import com.openlistmobile.app.ui.home.HomeScreen
+import com.openlistmobile.app.ui.components.clearFocusOnTap
 import com.openlistmobile.app.ui.theme.OpenListTheme
 import com.openlistmobile.app.ui.sync.SyncScreen
 import com.openlistmobile.app.ui.transfer.TransferScreen
@@ -39,7 +40,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             OpenListTheme {
                 Surface(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().clearFocusOnTap(),
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val navController = rememberNavController()

@@ -35,8 +35,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -53,6 +51,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
 import com.openlistmobile.app.ui.components.bounceClick
 import com.openlistmobile.app.ui.components.BounceIconButton
+import com.openlistmobile.app.ui.components.clearFocusOnTap
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,9 +82,7 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
         modifier = Modifier
             .fillMaxSize()
             .background(backgroundColor)
-            .pointerInput(Unit) {
-                detectTapGestures(onTap = { focusManager.clearFocus() })
-            }
+            .clearFocusOnTap()
             .padding(horizontal = 24.dp)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -445,6 +442,7 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
         // Connect Button
         Button(
             onClick = {
+                focusManager.clearFocus(force = true)
                 val protocol = if (isHttps) "https" else "http"
                 val serverUrl = "$protocol://$host:$port"
                 val name = if (aliasName.isBlank()) host else aliasName

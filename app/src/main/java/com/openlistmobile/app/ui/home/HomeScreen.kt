@@ -68,8 +68,6 @@ import com.openlistmobile.app.data.remote.model.AListFile
 import com.openlistmobile.app.ui.components.*
 import java.net.URLEncoder
 
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.platform.LocalFocusManager
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -118,11 +116,7 @@ fun HomeScreen(
     }
 
     Scaffold(
-        modifier = Modifier.pointerInput(Unit) {
-            detectTapGestures(onTap = {
-                focusManager.clearFocus()
-            })
-        },
+        modifier = Modifier.clearFocusOnTap(),
         topBar = {
             if (uiState.currentProfile != null) {
                 Surface(color = Color(0xFFFDFDFF)) {
@@ -367,20 +361,36 @@ fun HomeScreen(
                 onDismissRequest = { viewModel.closeRenameDialog() },
                 title = { Text("重命名") },
                 text = {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text("新名称") },
-                        singleLine = true
-                    )
+                    Column(
+                        modifier = Modifier.clearFocusOnTap()
+                    ) {
+                        OutlinedTextField(
+                            value = newName,
+                            onValueChange = { newName = it },
+                            label = { Text("新名称") },
+                            singleLine = true
+                        )
+                    }
                 },
                 confirmButton = {
-                    TextButton(onClick = {
-                        viewModel.renameFile(newName.trim(), context)
-                    }) { Text("重命名") }
+                    TextButton(
+                        onClick = {
+                            focusManager.clearFocus(force = true)
+                            viewModel.renameFile(newName.trim(), context)
+                        }
+                    ) {
+                        Text("重命名")
+                    }
                 },
                 dismissButton = {
-                    TextButton(onClick = { viewModel.closeRenameDialog() }) { Text("取消") }
+                    TextButton(
+                        onClick = {
+                            focusManager.clearFocus(force = true)
+                            viewModel.closeRenameDialog()
+                        }
+                    ) {
+                        Text("取消")
+                    }
                 }
             )
         }
@@ -702,13 +712,29 @@ fun FileBrowserView(
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 items(uiState.files, key = { it.name + it.modified }) { file ->
+                                    val isSelected = uiState.selectedFiles.contains(file)
                                     FileGridItem(
                                         file = file,
+                                        isSelected = isSelected,
+                                        isSelectionMode = uiState.isSelectionMode,
                                         viewModel = viewModel,
                                         context = context,
                                         onRenameRequest = { onRenameRequest(it) },
                                         onDeleteRequest = { onDeleteRequest(it) },
                                         onImagePreview = onImagePreview,
+                                        onClick = {
+                                            if (uiState.isSelectionMode) {
+                                                viewModel.toggleFileSelection(file)
+                                            } else {
+                                                handleFileClick(file, viewModel, context, onImagePreview = onImagePreview)
+                                            }
+                                        },
+                                        onLongClick = {
+                                            if (!uiState.isSelectionMode) {
+                                                viewModel.toggleSelectionMode(true)
+                                                viewModel.toggleFileSelection(file)
+                                            }
+                                        },
                                         modifier = Modifier.animateItemPlacement()
                                     )
                                 }
@@ -817,29 +843,26 @@ private fun handleFileClick(
 @Composable
 fun FileGridItem(
     file: AListFile,
+    isSelected: Boolean,
+    isSelectionMode: Boolean,
     viewModel: HomeViewModel,
     context: android.content.Context,
     onRenameRequest: (AListFile) -> Unit,
     onDeleteRequest: (AListFile) -> Unit,
     onImagePreview: (String) -> Unit,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val fileIconInfo = getFileIconAndTint(file)
     val icon = fileIconInfo.icon
-    val iconTint = if (file.is_dir) {
+    val iconTint = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else if (file.is_dir) {
         MaterialTheme.colorScheme.primary
     } else {
         fileIconInfo.tint
     }
-
-    val timeString = try {
-        file.modified.substringBefore("T").replace("-", "/") + " " + file.modified.substringAfter("T").take(5)
-    } catch (e: Exception) {
-        file.modified
-    }
-
-    val sizeString = if (file.is_dir) "" else com.openlistmobile.app.ui.components.formatFileSize(file.size)
-    val metaText = "$timeString  $sizeString".trim()
 
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -853,9 +876,6 @@ fun FileGridItem(
     )
 
     Card(
-        onClick = {
-            handleFileClick(file, viewModel, context, onImagePreview = onImagePreview)
-        },
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer {
@@ -865,12 +885,21 @@ fun FileGridItem(
         interactionSource = interactionSource,
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = if (isSelected)
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+            else
+                MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                    interactionSource = interactionSource,
+                    indication = androidx.compose.foundation.LocalIndication.current
+                )
                 .fillMaxWidth()
                 .padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -878,30 +907,35 @@ fun FileGridItem(
             val ext = file.name.substringAfterLast('.', "").lowercase()
             val isImage = !file.is_dir && ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "ico", "heic", "tiff")
 
-            if (isImage) {
-                val thumbUrl = if (file.thumb.isNotBlank()) {
-                    if (file.thumb.startsWith("http://") || file.thumb.startsWith("https://")) {
-                        file.thumb
-                    } else {
-                        val baseUrl = viewModel.uiState.value.currentProfile?.serverUrl?.trimEnd('/')
-                        if (baseUrl != null) {
-                            if (file.thumb.startsWith("/")) "$baseUrl${file.thumb}" else "$baseUrl/${file.thumb}"
-                        } else {
+            Box(
+                modifier = Modifier.size(48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = "Selected",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else if (isImage) {
+                    val thumbUrl = if (file.thumb.isNotBlank()) {
+                        if (file.thumb.startsWith("http://") || file.thumb.startsWith("https://")) {
                             file.thumb
+                        } else {
+                            val baseUrl = viewModel.uiState.value.currentProfile?.serverUrl?.trimEnd('/')
+                            if (baseUrl != null) {
+                                if (file.thumb.startsWith("/")) "$baseUrl${file.thumb}" else "$baseUrl/${file.thumb}"
+                            } else {
+                                file.thumb
+                            }
                         }
+                    } else {
+                        viewModel.generateDirectLink(file)
                     }
-                } else {
-                    viewModel.generateDirectLink(file)
-                }
 
-                var imageState by remember { mutableStateOf<AsyncImagePainter.State>(AsyncImagePainter.State.Empty) }
+                    var imageState by remember { mutableStateOf<AsyncImagePainter.State>(AsyncImagePainter.State.Empty) }
 
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(MaterialTheme.shapes.small),
-                    contentAlignment = Alignment.Center
-                ) {
                     if (thumbUrl != null) {
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
@@ -910,7 +944,7 @@ fun FileGridItem(
                                 .build(),
                             contentDescription = file.name,
                             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier.fillMaxSize().clip(MaterialTheme.shapes.small),
                             onState = { imageState = it }
                         )
                     }
@@ -922,11 +956,6 @@ fun FileGridItem(
                             tint = iconTint.copy(alpha = 0.6f),
                             modifier = Modifier.fillMaxSize()
                         )
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = iconTint,
-                            strokeWidth = 2.dp
-                        )
                     } else if (imageState is AsyncImagePainter.State.Error) {
                         Icon(
                             imageVector = icon,
@@ -935,16 +964,14 @@ fun FileGridItem(
                             modifier = Modifier.fillMaxSize()
                         )
                     }
+                } else {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = iconTint,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
-            } else {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(MaterialTheme.shapes.small)
-                )
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
