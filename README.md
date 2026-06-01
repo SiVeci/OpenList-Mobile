@@ -37,7 +37,7 @@ OpenList Mobile 是一款基于 Android 平台开发的 AList 客户端应用。
 *   **Domain 层**: 定义具体的业务抽象，例如 `AuthRepository`、`FileRepository`、`TransferRepository` 与 `SyncRepository`。包含用于计算目录差异的 `DiffEngine`。
 *   **Data 层**: 
     *   **远程数据**: 通过 `AListApiService` 定义的 Retrofit 接口与服务器进行 HTTP 通信。
-    *   **本地数据**: 利用 Room 数据库维护状态，涵盖缓存目录信息 (`DirectoryCache`)、上传/下载任务队列 (`TransferTask`)、同步规则 (`SyncRule`) 和服务端点配置 (`ServerProfile`)。
+    *   **本地数据**: 利用 Room 数据库维护状态，涵盖上传/下载任务队列 (`TransferTask`)、同步规则 (`SyncRule`) 和服务端点配置 (`ServerProfile`)。
 *   **核心服务与组件**:
     *   `TransferService`: 基于 `Service` (Foreground Service Type: `dataSync`) 执行后台文件读写及传输任务，并实时更新通知栏状态。
     *   `AListDocumentsProvider`: 继承 Android 标准组件 `DocumentsProvider`，将服务端文件结构适配并暴露给 Android 系统层。
@@ -119,4 +119,7 @@ OpenList Mobile 是一款基于 Android 平台开发的 AList 客户端应用。
 - [x] ~~**全局聚合搜索与过滤**: 接入 AList 的 `/api/fs/search` 接口，提供全局跨目录检索能力，并支持按文件类型（图片、视频、文档）、大小等条件进行精确过滤。~~
 - [x] ~~**高级文本与代码预览器**: 升级当前的 `TextPreviewOverlay`，集成第三方渲染库以优美地渲染 Markdown 格式文本，同时为代码文件（如 `.py`, `.js`, `.json` 等）提供语法高亮和行号显示功能。~~
 - [x] ~~**指定目录一键同步**: 支持将本地系统文件夹与 AList 指定云端目录进行绑定，通过 Android `WorkManager` 实现后台静默或手动一键同步（支持双向同步或单向备份）。~~
+- [x] ~~**批量文件操作**: 支持文件及文件夹的移动与复制功能，支持多选操作。~~
+- [x] ~~**直链批量提取**: 支持一键提取并复制带有签名的下载直链。~~
+- [x] ~~**Markdown 预览切换**: 文本预览区支持源码与渲染模式无缝切换。~~
 - [ ] **自动同步**: 实现后台定时静默同步
