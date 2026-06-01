@@ -2,7 +2,7 @@
   <img src="app/src/main/res/mipmap-xxhdpi/ic_launcher.webp" width="100" />
   <h1>OpenList Mobile</h1>
   <p>
-    <img src="https://img.shields.io/badge/Version-v1.3.0-blue" alt="Version">
+    <img src="https://img.shields.io/badge/Version-v1.4.0-blue" alt="Version">
     <img src="https://img.shields.io/badge/Platform-Android%208.0%2B-brightgreen" alt="Platform">
     <img src="https://img.shields.io/badge/Language-Kotlin%201.9.23-blue" alt="Language">
     <img src="https://img.shields.io/badge/Framework-Compose%20%7C%20Hilt-orange" alt="Framework">
@@ -27,6 +27,7 @@ OpenList Mobile 是一款基于 Android 平台开发的 AList 客户端应用。
 *   **媒体播放**: Media3 ExoPlayer 1.3.1
 *   **文本渲染**: Markwon (Markdown 解析), Prism4j (语法高亮)
 *   **并发编程**: Kotlin Coroutines 1.8.0
+*   **后台任务**: WorkManager 2.9.0, Hilt Work 1.2.0
 *   **系统组件兼容**: AndroidX Core (1.13.1), Lifecycle (2.8.0), DocumentFile (1.0.1)
 
 ## 架构设计 (Architecture)
@@ -39,8 +40,10 @@ OpenList Mobile 是一款基于 Android 平台开发的 AList 客户端应用。
     *   **远程数据**: 通过 `AListApiService` 定义的 Retrofit 接口与服务器进行 HTTP 通信。
     *   **本地数据**: 利用 Room 数据库维护状态，涵盖上传/下载任务队列 (`TransferTask`)、同步规则 (`SyncRule`) 和服务端点配置 (`ServerProfile`)。
 *   **核心服务与组件**:
-    *   `TransferService`: 基于 `Service` (Foreground Service Type: `dataSync`) 执行后台文件读写及传输任务，并实时更新通知栏状态。
+    *   `TransferService`: 基于 `Service` (Foreground Service Type: `dataSync`) 执行后台文件读写及传输任务，并实时更新通知栏状态。支持多账号隔离传输。
     *   `AListDocumentsProvider`: 继承 Android 标准组件 `DocumentsProvider`，将服务端文件结构适配并暴露给 Android 系统层。
+    *   `ProfileContextManager`: 账号上下文管理器，通过 `Mutex` 保证线程安全，支持后台任务与前台操作并行时的账号隔离。
+    *   `SyncWorkScheduler` / `SyncWorker`: 基于 `WorkManager` 的后台定时同步调度框架，支持按规则配置触发频率与约束条件。
     *   **安全性设计**: 通过 `KeystoreManager` 调用 Android KeyStore，在硬件层或系统层生成 `AES/GCM/NoPadding` 密钥。获取到的服务端 Token 被加密后再存入 SQLite 数据库，避免明文泄露。
 
 ## 安装与下载 (Installation & Download)
@@ -122,4 +125,5 @@ OpenList Mobile 是一款基于 Android 平台开发的 AList 客户端应用。
 - [x] ~~**批量文件操作**: 支持文件及文件夹的移动与复制功能，支持多选操作。~~
 - [x] ~~**直链批量提取**: 支持一键提取并复制带有签名的下载直链。~~
 - [x] ~~**Markdown 预览切换**: 文本预览区支持源码与渲染模式无缝切换。~~
-- [ ] **自动同步**: 实现后台定时静默同步
+- [x] ~~**后台自动静默同步**: 基于 WorkManager 实现定时自动同步，支持 Wi-Fi/充电约束，配合账号隔离机制实现多账号并行同步。~~
+- [ ] **自动同步失败重试**: 为后台自动同步补充 `Result.retry()` 策略，网络波动等临时失败时自动重试。

@@ -489,7 +489,7 @@ fun LoginView(viewModel: HomeViewModel, uiState: HomeUiState) {
         Spacer(modifier = Modifier.height(32.dp))
         
         Text(
-            text = "v1.3.0",
+            text = "v1.4.0",
             color = Color(0xFFCBD5E1),
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
