@@ -11,6 +11,12 @@ on:
   
   # 保留 workflow_dispatch，允许在 GitHub 网页端手动触发构建
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version Number (e.g., 1.2.0)'
+        required: true
+        default: '1.0.0'
+        type: string
 
 jobs:
   build:
@@ -52,9 +58,14 @@ jobs:
         -Pandroid.injected.signing.key.alias=$KEY_ALIAS 
         -Pandroid.injected.signing.key.password=$KEY_PASSWORD
 
+    # 重命名 APK，以便产出符合版本号要求的文件名
+    - name: Rename APK
+      run: |
+        mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/openlist_mobile_v${{ github.event.inputs.version }}_android_universal.apk
+
     # 上传 Release APK
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: app-release-apk
-        path: app/build/outputs/apk/release/app-release.apk
+        name: openlist_mobile_v${{ github.event.inputs.version }}_android_universal
+        path: app/build/outputs/apk/release/openlist_mobile_v${{ github.event.inputs.version }}_android_universal.apk
