@@ -37,6 +37,8 @@ enum class FilterCategory(val label: String) {
     Other("其他")
 }
 
+enum class NavigationDirection { Forward, Back }
+
 enum class SortBy { Name, Size, Time }
 enum class SortOrder { Asc, Desc }
 
@@ -58,7 +60,9 @@ data class HomeUiState(
     val profiles: List<ServerProfile> = emptyList(),
     val currentProfile: ServerProfile? = null,
     val currentPath: String = "/",
-    
+    val navigationDirection: NavigationDirection = NavigationDirection.Forward,
+    val navigatingFolderName: String? = null,
+
     val rawFiles: List<AListFile> = emptyList(),
     val files: List<AListFile> = emptyList(),
     
@@ -214,32 +218,42 @@ class HomeViewModel @Inject constructor(
     fun fetchFiles(path: String, isRefresh: Boolean = false) {
         fetchJob?.cancel()
         fetchJob = viewModelScope.launch {
-            _uiState.update { it.copy(
-                isLoading = !isRefresh,
-                isRefreshing = isRefresh,
-                error = null,
-                currentPath = path,
-                page = 1,
-                rawFiles = emptyList()
-            ) }
+            // 刷新当前目录时清空旧内容并显示 loading
+            // 导航到新目录时保留旧内容，由 navigatingFolderName 提供行级 loading 反馈
+            if (isRefresh || path == _uiState.value.currentPath) {
+                _uiState.update { it.copy(
+                    isLoading = !isRefresh,
+                    isRefreshing = isRefresh,
+                    error = null,
+                    page = 1,
+                    rawFiles = emptyList()
+                ) }
+            }
             
             fileRepository.getFileListFlow(path, page = 1, perPage = 30, refresh = isRefresh).collect { result ->
                 result.onSuccess { data ->
                     val newFiles = data.content ?: emptyList()
                     _uiState.update { state -> 
                         state.copy(
+                            currentPath = path,
                             rawFiles = newFiles,
                             isLoading = false,
                             isRefreshing = false,
+                            navigatingFolderName = null,
                             hasMore = newFiles.size < data.total
                         ) 
                     }
                     applyFiltersAndSort()
                 }.onFailure { error ->
+                    // 导航失败时从 pathStack 恢复
+                    if (!isRefresh && path != _uiState.value.currentPath && pathStack.isNotEmpty()) {
+                        pathStack.removeLast()
+                    }
                     _uiState.update { state -> 
                         state.copy(
                             isLoading = false,
                             isRefreshing = false,
+                            navigatingFolderName = null,
                             error = error.message
                         )
                     }
@@ -286,7 +300,20 @@ class HomeViewModel @Inject constructor(
         pathStack.add(state.currentPath)
         val newPath = if (state.currentPath == "/") "/$folderName" else "${state.currentPath}/$folderName"
         clearSelection()
+        _uiState.update { it.copy(
+            navigationDirection = NavigationDirection.Forward,
+            navigatingFolderName = folderName
+        ) }
         fetchFiles(newPath)
+    }
+
+    fun navigateToPath(targetPath: String) {
+        val state = _uiState.value
+        if (targetPath == state.currentPath) return
+        pathStack.add(state.currentPath)
+        clearSelection()
+        _uiState.update { it.copy(navigationDirection = NavigationDirection.Back) }
+        fetchFiles(targetPath)
     }
 
     fun navigateBack(): Boolean {
@@ -297,6 +324,7 @@ class HomeViewModel @Inject constructor(
         if (pathStack.isNotEmpty()) {
             val previousPath = pathStack.removeLast()
             clearSelection()
+            _uiState.update { it.copy(navigationDirection = NavigationDirection.Back) }
             fetchFiles(previousPath)
             return true
         }

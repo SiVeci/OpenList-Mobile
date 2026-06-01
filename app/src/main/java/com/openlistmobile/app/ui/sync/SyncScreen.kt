@@ -77,6 +77,7 @@ fun SyncScreen(
     var showRuleMenu by remember { mutableStateOf(false) }
     var showNewSheet by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<com.openlistmobile.app.data.local.SyncRule?>(null) }
+    var ruleToDelete by remember { mutableStateOf<com.openlistmobile.app.data.local.SyncRule?>(null) }
 
     val rotationAngle by animateFloatAsState(
         targetValue = if (showRuleMenu) 180f else 0f,
@@ -117,16 +118,11 @@ fun SyncScreen(
                                         showRuleMenu = false
                                     },
                                     trailingIcon = {
-                                        Row {
-                                            IconButton(onClick = {
-                                                editingRule = rule
-                                                showRuleMenu = false
-                                            }) {
-                                                Icon(Icons.Rounded.Settings, contentDescription = "编辑规则")
-                                            }
-                                            IconButton(onClick = { viewModel.deleteRule(rule); showRuleMenu = false }) {
-                                                Icon(Icons.Rounded.Delete, contentDescription = "删除规则")
-                                            }
+                                        IconButton(onClick = { 
+                                            ruleToDelete = rule
+                                            showRuleMenu = false 
+                                        }) {
+                                            Icon(Icons.Rounded.Delete, contentDescription = "删除规则")
                                         }
                                     }
                                 )
@@ -140,6 +136,11 @@ fun SyncScreen(
                     }
                 },
                 actions = {
+                    state.selectedRule?.let { rule ->
+                        IconButton(onClick = { editingRule = rule }) {
+                            Icon(Icons.Rounded.Settings, contentDescription = "编辑规则")
+                        }
+                    }
                     IconButton(onClick = { showNewSheet = true }) {
                         Icon(Icons.Rounded.Add, contentDescription = "新增规则")
                     }
@@ -193,6 +194,27 @@ fun SyncScreen(
             diff = diff,
             onConfirm = { deleteApproved -> viewModel.confirmSync(deleteApproved) },
             onDismiss = { viewModel.cancelConfirm() }
+        )
+    }
+
+    ruleToDelete?.let { rule ->
+        AlertDialog(
+            onDismissRequest = { ruleToDelete = null },
+            title = { Text("确认删除同步配置？") },
+            text = { Text("你即将删除同步配置「${rule.ruleName}」，此操作不可恢复。配置所关联的本地和云端文件不会受到影响。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteRule(rule)
+                        ruleToDelete = null
+                    }
+                ) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { ruleToDelete = null }) { Text("取消") }
+            }
         )
     }
 }
