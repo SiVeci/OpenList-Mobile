@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
@@ -62,6 +63,8 @@ fun SyncRuleConfigSheet(
     var ignoreTime by remember { mutableStateOf(existingRule?.ignoreModifiedTime ?: false) }
     var showCloudPicker by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
+    
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val dirPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -88,17 +91,20 @@ fun SyncRuleConfigSheet(
         )
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .clearFocusOnTap()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp)
+                .padding(bottom = 24.dp)
         ) {
             Text(if (isEdit) "编辑同步规则" else "新建同步规则", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
 
             OutlinedTextField(
                 value = ruleName,
@@ -108,7 +114,7 @@ fun SyncRuleConfigSheet(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
             Text("目录映射", style = MaterialTheme.typography.titleSmall)
 
             ReadOnlyPathField(
@@ -122,16 +128,17 @@ fun SyncRuleConfigSheet(
                         focusManager.clearFocus(force = true)
                         showCloudPicker = true
                     },
-                    modifier = Modifier.padding(top = 4.dp)
+                    modifier = Modifier.padding(top = 2.dp).height(36.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                 ) {
-                    Text("选择云端目录")
+                    Text("选择云端目录", style = MaterialTheme.typography.labelLarge)
                 }
             }
 
             ReadOnlyPathField(
                 label = "本地目录",
                 value = localUri,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
             )
             if (!isEdit) {
                 OutlinedButton(
@@ -139,20 +146,21 @@ fun SyncRuleConfigSheet(
                         focusManager.clearFocus(force = true)
                         dirPicker.launch(null)
                     },
-                    modifier = Modifier.padding(top = 4.dp)
+                    modifier = Modifier.padding(top = 2.dp).height(36.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                 ) {
-                    Text("选择本地目录 (SAF)")
+                    Text("选择本地目录 (SAF)", style = MaterialTheme.typography.labelLarge)
                 }
             } else {
                 Text(
                     "基于1对1安全映射规则，路径不可更改，需删除规则后重建。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp)
+                    modifier = Modifier.padding(top = 2.dp)
                 )
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
             Text("同步模式", style = MaterialTheme.typography.titleSmall)
             RuleRadio("云端 ➔ 本地（下载）", syncMode == SyncMode.DOWNLOAD_ONLY) { syncMode = SyncMode.DOWNLOAD_ONLY }
             RuleRadio("本地 ➔ 云端（上传）", syncMode == SyncMode.UPLOAD_ONLY) { syncMode = SyncMode.UPLOAD_ONLY }
@@ -163,15 +171,15 @@ fun SyncRuleConfigSheet(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { mirrorDelete = !mirrorDelete }) {
                     Checkbox(checked = mirrorDelete, onCheckedChange = { mirrorDelete = it })
                     Text(
-                        if (syncMode == SyncMode.DOWNLOAD_ONLY) "镜像模式：删除本地多余文件（危险）"
-                        else "镜像模式：删除云端多余文件（危险）",
+                        if (syncMode == SyncMode.DOWNLOAD_ONLY) "镜像模式：删除本地多余文件"
+                        else "镜像模式：删除云端多余文件",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
             }
 
             if (syncMode == SyncMode.TWO_WAY) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(4.dp))
                 Text("冲突处理策略", style = MaterialTheme.typography.titleSmall)
                 RuleRadio("以最新修改时间为准", conflictStrategy == ConflictStrategy.NEWEST_WINS) { conflictStrategy = ConflictStrategy.NEWEST_WINS }
                 RuleRadio("跳过冲突文件", conflictStrategy == ConflictStrategy.SKIP) { conflictStrategy = ConflictStrategy.SKIP }
@@ -179,24 +187,24 @@ fun SyncRuleConfigSheet(
                 RuleRadio("始终以本地为准", conflictStrategy == ConflictStrategy.LOCAL_WINS) { conflictStrategy = ConflictStrategy.LOCAL_WINS }
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Switch(checked = ignoreTime, onCheckedChange = { ignoreTime = it })
-                Text("仅对比文件大小，忽略修改时间", modifier = Modifier.padding(start = 8.dp))
+                Switch(checked = ignoreTime, onCheckedChange = { ignoreTime = it }, modifier = Modifier.scale(0.8f))
+                Text("仅对比文件大小，忽略修改时间", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp))
             }
 
             Text(
-                "定时自动同步与网络约束本期暂未启用（手动同步）。",
+                "定时自动同步与网络约束本期暂未启用。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp)
+                modifier = Modifier.padding(top = 4.dp)
             )
 
             errorMsg?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
+                Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall)
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = {
                     focusManager.clearFocus(force = true)
@@ -262,13 +270,13 @@ private fun ReadOnlyPathField(
         Surface(
             color = MaterialTheme.colorScheme.surfaceVariant,
             shape = MaterialTheme.shapes.small,
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
         ) {
             Text(
                 text = value.ifBlank { "未选择" },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
             )
         }
     }
@@ -278,7 +286,7 @@ private fun ReadOnlyPathField(
 private fun RuleRadio(label: String, selected: Boolean, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().clickable { onClick() }
+        modifier = Modifier.fillMaxWidth().height(36.dp).clickable { onClick() }
     ) {
         RadioButton(selected = selected, onClick = onClick)
         Text(label, style = MaterialTheme.typography.bodyMedium)

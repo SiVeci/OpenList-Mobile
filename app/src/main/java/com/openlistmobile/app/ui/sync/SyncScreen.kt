@@ -1,6 +1,7 @@
 package com.openlistmobile.app.ui.sync
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Add
@@ -56,6 +58,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -75,6 +78,11 @@ fun SyncScreen(
     var showNewSheet by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<com.openlistmobile.app.data.local.SyncRule?>(null) }
 
+    val rotationAngle by animateFloatAsState(
+        targetValue = if (showRuleMenu) 180f else 0f,
+        label = "arrowRotation"
+    )
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -89,7 +97,13 @@ fun SyncScreen(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            Icon(Icons.Rounded.SwapVert, contentDescription = "切换规则", modifier = Modifier.size(18.dp))
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = "切换规则",
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .rotate(rotationAngle)
+                            )
                         }
                         DropdownMenu(expanded = showRuleMenu, onDismissRequest = { showRuleMenu = false }) {
                             if (state.rules.isEmpty()) {
