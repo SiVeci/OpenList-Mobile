@@ -50,6 +50,18 @@ data class RenameRequest(
     val path: String
 )
 
+data class MoveRequest(
+    val src_dir: String,
+    val dst_dir: String,
+    val names: List<String>
+)
+
+data class CopyRequest(
+    val src_dir: String,
+    val dst_dir: String,
+    val names: List<String>
+)
+
 data class RemoveRequest(
     val dir: String,
     val names: List<String>

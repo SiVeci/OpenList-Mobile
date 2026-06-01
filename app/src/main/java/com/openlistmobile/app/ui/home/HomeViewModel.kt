@@ -103,7 +103,13 @@ data class HomeUiState(
     val isSearching: Boolean = false,
     val searchError: String? = null,
     val searchTotal: Int = 0,
-    val searchPage: Int = 1
+    val searchPage: Int = 1,
+
+    val showRenameDialog: Boolean = false,
+    val renameTarget: AListFile? = null,
+    val showMoveDirPicker: Boolean = false,
+    val isCopyOperation: Boolean = false,
+    val isMovingOrCopying: Boolean = false
 )
 
 @HiltViewModel
@@ -355,6 +361,112 @@ class HomeViewModel @Inject constructor(
             startDownload(context, file)
         }
         clearSelection()
+    }
+
+    fun copyDownloadLinks(context: android.content.Context) {
+        val selected = _uiState.value.selectedFiles.filter { !it.is_dir }
+        if (selected.isEmpty()) return
+
+        val baseUrl = _uiState.value.currentProfile?.serverUrl ?: return
+        val currentPath = _uiState.value.currentPath
+        
+        val links = selected.joinToString("\n") { file ->
+            val fullPath = if (currentPath == "/") "/${file.name}" else "$currentPath/${file.name}"
+            com.openlistmobile.app.utils.RemoteLinkBuilder.build(baseUrl, fullPath, file.sign)
+        }
+
+        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clip = android.content.ClipData.newPlainText("Download Links", links)
+        clipboard.setPrimaryClip(clip)
+
+        android.widget.Toast.makeText(context, "已复制 ${selected.size} 个文件的下载链接", android.widget.Toast.LENGTH_SHORT).show()
+        clearSelection()
+    }
+
+    fun openRenameDialog(file: AListFile) {
+        _uiState.update { it.copy(showRenameDialog = true, renameTarget = file) }
+    }
+
+    fun closeRenameDialog() {
+        _uiState.update { it.copy(showRenameDialog = false, renameTarget = null) }
+    }
+
+    fun renameFile(newName: String, context: android.content.Context) {
+        val target = _uiState.value.renameTarget ?: return
+        if (newName.isBlank() || newName == target.name) {
+            closeRenameDialog()
+            return
+        }
+
+        viewModelScope.launch {
+            val currentPath = _uiState.value.currentPath
+            val fullPath = if (currentPath == "/") "/${target.name}" else "$currentPath/${target.name}"
+            
+            fileRepository.rename(newName, fullPath).onSuccess {
+                closeRenameDialog()
+                clearSelection()
+                refresh()
+                android.widget.Toast.makeText(context, "重命名成功", android.widget.Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                android.widget.Toast.makeText(context, "重命名失败: ${it.message}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun openMoveDirPicker(isCopy: Boolean = false) {
+        _uiState.update { it.copy(showMoveDirPicker = true, isCopyOperation = isCopy) }
+    }
+
+    fun closeMoveDirPicker() {
+        _uiState.update { it.copy(showMoveDirPicker = false) }
+    }
+
+    fun moveFiles(targetPath: String, context: android.content.Context) {
+        val selected = _uiState.value.selectedFiles.toList()
+        if (selected.isEmpty()) return
+        
+        val currentPath = _uiState.value.currentPath
+        if (targetPath == currentPath) {
+            android.widget.Toast.makeText(context, "不能移动到当前目录", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMovingOrCopying = true) }
+            val names = selected.map { it.name }
+            fileRepository.move(currentPath, targetPath, names).onSuccess {
+                closeMoveDirPicker()
+                clearSelection()
+                refresh()
+                _uiState.update { it.copy(isMovingOrCopying = false) }
+                android.widget.Toast.makeText(context, "已移动 ${selected.size} 个项目", android.widget.Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                _uiState.update { it.copy(isMovingOrCopying = false) }
+                android.widget.Toast.makeText(context, "移动失败: ${it.message}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun copyFiles(targetPath: String, context: android.content.Context) {
+        val selected = _uiState.value.selectedFiles.toList()
+        if (selected.isEmpty()) return
+        
+        val currentPath = _uiState.value.currentPath
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMovingOrCopying = true) }
+            val names = selected.map { it.name }
+            fileRepository.copy(currentPath, targetPath, names).onSuccess {
+                closeMoveDirPicker()
+                clearSelection()
+                refresh()
+                _uiState.update { it.copy(isMovingOrCopying = false) }
+                android.widget.Toast.makeText(context, "已复制 ${selected.size} 个项目", android.widget.Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                _uiState.update { it.copy(isMovingOrCopying = false) }
+                android.widget.Toast.makeText(context, "复制失败: ${it.message}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     // --- Phase 5: CRUD Operations ---

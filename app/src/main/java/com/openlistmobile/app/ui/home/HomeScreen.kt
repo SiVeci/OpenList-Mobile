@@ -26,7 +26,11 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.VerticalAlignBottom
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.DriveFileMove
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.rounded.Folder
+import com.openlistmobile.app.ui.sync.CloudDirPickerDialog
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.InsertDriveFile
 import androidx.compose.material.icons.rounded.Movie
@@ -79,7 +83,6 @@ fun HomeScreen(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
 
-    var renameTarget by remember { mutableStateOf<AListFile?>(null) }
     var deleteTarget by remember { mutableStateOf<AListFile?>(null) }
     var previewImageUrl by remember { mutableStateOf<String?>(null) }
     var showSettingsDialog by remember { mutableStateOf(false) }
@@ -245,9 +248,20 @@ fun HomeScreen(
                                     else MaterialTheme.colorScheme.inverseOnSurface
                                 )
                             }
-                            IconButton(onClick = { /* TODO: Batch Copy */ }) {
-                                Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy")
+                            
+                            IconButton(
+                                onClick = { viewModel.copyDownloadLinks(context) },
+                                enabled = uiState.selectedFiles.none { it.is_dir }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Link,
+                                    contentDescription = "Copy Links",
+                                    tint = if (uiState.selectedFiles.any { it.is_dir }) 
+                                        MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.3f) 
+                                    else MaterialTheme.colorScheme.inverseOnSurface
+                                )
                             }
+                            
                             IconButton(
                                 onClick = { 
                                     viewModel.batchDeleteSelected()
@@ -257,6 +271,43 @@ fun HomeScreen(
                                     .background(MaterialTheme.colorScheme.error)
                             ) {
                                 Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = Color.White)
+                            }
+                            
+                            Box {
+                                var showMoreMenu by remember { mutableStateOf(false) }
+                                IconButton(onClick = { showMoreMenu = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "More")
+                                }
+                                DropdownMenu(
+                                    expanded = showMoreMenu,
+                                    onDismissRequest = { showMoreMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("移动 (Move)") },
+                                        leadingIcon = { Icon(Icons.Outlined.DriveFileMove, null) },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            viewModel.openMoveDirPicker(isCopy = false)
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("复制 (Copy)") },
+                                        leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            viewModel.openMoveDirPicker(isCopy = true)
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("重命名 (Rename)") },
+                                        leadingIcon = { Icon(Icons.Outlined.Edit, null) },
+                                        enabled = uiState.selectedFiles.size == 1,
+                                        onClick = {
+                                            showMoreMenu = false
+                                            viewModel.openRenameDialog(uiState.selectedFiles.first())
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -276,39 +327,75 @@ fun HomeScreen(
                 FileBrowserView(
                     viewModel = viewModel,
                     uiState = uiState,
-                    onRenameRequest = { renameTarget = it },
+                    onRenameRequest = { viewModel.openRenameDialog(it) },
                     onDeleteRequest = { deleteTarget = it },
                     onImagePreview = { previewImageUrl = it }
                 )
+            }
+
+            if (uiState.isMovingOrCopying) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = Color.Black.copy(alpha = 0.3f)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                CircularProgressIndicator()
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text("正在处理...", style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 
     // --- Dialogs ---
 
-    renameTarget?.let { file ->
-        var newName by remember { mutableStateOf(file.name) }
-        AlertDialog(
-            onDismissRequest = { renameTarget = null },
-            title = { Text("重命名") },
-            text = {
-                OutlinedTextField(
-                    value = newName,
-                    onValueChange = { newName = it },
-                    label = { Text("新名称") },
-                    singleLine = true
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (newName.isNotBlank() && newName != file.name) {
-                        viewModel.renameFile(file, newName.trim())
-                    }
-                    renameTarget = null
-                }) { Text("重命名") }
-            },
-            dismissButton = {
-                TextButton(onClick = { renameTarget = null }) { Text("取消") }
+    if (uiState.showRenameDialog) {
+        val file = uiState.renameTarget
+        if (file != null) {
+            var newName by remember { mutableStateOf(file.name) }
+            AlertDialog(
+                onDismissRequest = { viewModel.closeRenameDialog() },
+                title = { Text("重命名") },
+                text = {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("新名称") },
+                        singleLine = true
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.renameFile(newName.trim(), context)
+                    }) { Text("重命名") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.closeRenameDialog() }) { Text("取消") }
+                }
+            )
+        }
+    }
+
+    if (uiState.showMoveDirPicker) {
+        CloudDirPickerDialog(
+            initialPath = uiState.currentPath,
+            onDismiss = { viewModel.closeMoveDirPicker() },
+            onConfirm = { targetPath ->
+                if (uiState.isCopyOperation) {
+                    viewModel.copyFiles(targetPath, context)
+                } else {
+                    viewModel.moveFiles(targetPath, context)
+                }
             }
         )
     }
@@ -619,8 +706,8 @@ fun FileBrowserView(
                                         file = file,
                                         viewModel = viewModel,
                                         context = context,
-                                        onRenameRequest = { /* TODO */ },
-                                        onDeleteRequest = { /* TODO */ },
+                                        onRenameRequest = { viewModel.openRenameDialog(it) },
+                                        onDeleteRequest = { deleteTarget = it },
                                         onImagePreview = onImagePreview,
                                         modifier = Modifier.animateItemPlacement()
                                     )

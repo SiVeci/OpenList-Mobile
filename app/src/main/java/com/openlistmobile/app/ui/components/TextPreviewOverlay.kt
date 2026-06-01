@@ -22,6 +22,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Brightness6
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -67,6 +69,7 @@ fun TextPreviewOverlay(
     if (!isLoading && content == null) return
 
     var darkReadingMode by remember { mutableStateOf(false) }
+    var renderMarkdown by remember(fileName) { mutableStateOf(true) }
     val isDarkSystem = isSystemInDarkTheme()
     val effectiveDark = darkReadingMode || isDarkSystem
     val bgColor = if (effectiveDark) MaterialTheme.colorScheme.surface
@@ -96,6 +99,14 @@ fun TextPreviewOverlay(
                         }
                     },
                     actions = {
+                        if (isMarkdownFile(fileName)) {
+                            IconButton(onClick = { renderMarkdown = !renderMarkdown }) {
+                                Icon(
+                                    imageVector = if (renderMarkdown) Icons.Default.Code else Icons.Default.Visibility,
+                                    contentDescription = if (renderMarkdown) "View Raw" else "View Preview"
+                                )
+                            }
+                        }
                         IconButton(onClick = { darkReadingMode = !darkReadingMode }) {
                             Icon(Icons.Default.Brightness6, contentDescription = "Toggle Reading Mode")
                         }
@@ -111,7 +122,7 @@ fun TextPreviewOverlay(
                     } else {
                         val text = content ?: ""
                         when {
-                            isMarkdownFile(fileName) -> MarkdownPreview(text, effectiveDark)
+                            isMarkdownFile(fileName) && renderMarkdown -> MarkdownPreview(text, effectiveDark)
                             isCodeFile(fileName) -> CodePreview(text, codeLanguageFor(fileName), effectiveDark)
                             else -> PlainTextPreview(text, textColor)
                         }

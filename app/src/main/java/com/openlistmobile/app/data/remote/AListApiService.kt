@@ -31,6 +31,18 @@ interface AListApiService {
     ): AListResponse<Any>
 
     @POST
+    suspend fun move(
+        @Url url: String,
+        @Body request: MoveRequest
+    ): AListResponse<Any>
+
+    @POST
+    suspend fun copy(
+        @Url url: String,
+        @Body request: CopyRequest
+    ): AListResponse<Any>
+
+    @POST
     suspend fun remove(
         @Url url: String,
         @Body request: RemoveRequest
