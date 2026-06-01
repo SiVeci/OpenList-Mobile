@@ -126,6 +126,8 @@ class TransferService : Service() {
         val downloadingTask = task.copy(status = TransferStatus.DOWNLOADING)
         transferTaskDao.update(downloadingTask)
 
+        var currentTask = downloadingTask
+
         try {
             val isContentUri = downloadingTask.savePath.startsWith("content://")
             
@@ -165,7 +167,7 @@ class TransferService : Service() {
             // 优先信任入队时写入的云端权威总长；仅当其 <=0 时才用响应头推算
             val total = if (downloadingTask.totalBytes > 0) downloadingTask.totalBytes else headerTotal
 
-            var currentTask = downloadingTask.copy(totalBytes = total, downloadedBytes = downloaded)
+            currentTask = downloadingTask.copy(totalBytes = total, downloadedBytes = downloaded)
             transferTaskDao.update(currentTask)
 
             body.byteStream().use { input ->
@@ -204,8 +206,9 @@ class TransferService : Service() {
         } catch (e: CancellationException) {
             // Task was paused or cancelled
         } catch (e: Exception) {
-            transferTaskDao.update(task.copy(status = TransferStatus.ERROR, errorMsg = e.message))
-            updateNotification("Download failed: ${task.fileName}", 0, 100)
+            transferTaskDao.update(currentTask.copy(status = TransferStatus.ERROR, errorMsg = e.message))
+            val notifyTotal = if (currentTask.totalBytes > 0) currentTask.totalBytes else 100
+            updateNotification("Download failed: ${currentTask.fileName}", currentTask.downloadedBytes, notifyTotal)
             delay(1000)
         }
     }

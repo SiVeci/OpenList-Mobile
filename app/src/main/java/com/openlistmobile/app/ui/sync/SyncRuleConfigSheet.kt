@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,6 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
@@ -43,7 +48,8 @@ import com.openlistmobile.app.data.local.SyncMode
 import com.openlistmobile.app.data.local.SyncRule
 import com.openlistmobile.app.ui.components.clearFocusOnTap
 
-@OptIn(ExperimentalMaterial3Api::class)
+@Suppress("DEPRECATION")
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun SyncRuleConfigSheet(
     existingRule: SyncRule? = null,
@@ -96,14 +102,22 @@ fun SyncRuleConfigSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clearFocusOnTap()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp)
-        ) {
+        val hiddenTailHeight = 200.dp
+        CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clearFocusOnTap()
+                    .layout { measurable, constraints ->
+                        val placeable = measurable.measure(constraints)
+                        val containerHeight = placeable.height - hiddenTailHeight.roundToPx()
+                        layout(placeable.width, containerHeight) {
+                            placeable.placeRelative(0, 0)
+                        }
+                    }
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+            ) {
             Text(if (isEdit) "编辑同步规则" else "新建同步规则", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(8.dp))
 
@@ -251,11 +265,18 @@ fun SyncRuleConfigSheet(
                         }
                     }
                 }) { Text("保存") }
-            }
-        }
-    }
-}
+                }
 
+                Spacer(
+                Modifier
+                    .fillMaxWidth()
+                    .height(hiddenTailHeight)
+                    .background(MaterialTheme.colorScheme.surface)
+                )
+                }
+                }
+                }
+                }
 @Composable
 private fun ReadOnlyPathField(
     label: String,
