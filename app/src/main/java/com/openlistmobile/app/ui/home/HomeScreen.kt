@@ -706,8 +706,8 @@ fun FileBrowserView(
                                         file = file,
                                         viewModel = viewModel,
                                         context = context,
-                                        onRenameRequest = { viewModel.openRenameDialog(it) },
-                                        onDeleteRequest = { deleteTarget = it },
+                                        onRenameRequest = { onRenameRequest(it) },
+                                        onDeleteRequest = { onDeleteRequest(it) },
                                         onImagePreview = onImagePreview,
                                         modifier = Modifier.animateItemPlacement()
                                     )
