@@ -39,7 +39,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.layout.layout
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
@@ -73,6 +76,20 @@ fun SyncRuleConfigSheet(
     
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+    val lockUpwardScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                // If there's leftover upward scroll delta (available.y < 0), consume it
+                // to prevent the ModalBottomSheet from bouncing/jumping up.
+                return if (available.y < 0) available else Offset.Zero
+            }
+        }
+    }
+
     val dirPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -102,25 +119,18 @@ fun SyncRuleConfigSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState
     ) {
-        val hiddenTailHeight = 200.dp
         CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clearFocusOnTap()
-                    .layout { measurable, constraints ->
-                        val placeable = measurable.measure(constraints)
-                        val containerHeight = placeable.height - hiddenTailHeight.roundToPx()
-                        layout(placeable.width, containerHeight) {
-                            placeable.placeRelative(0, 0)
-                        }
-                    }
+                    .nestedScroll(lockUpwardScrollConnection)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp)
             ) {
-            Text(if (isEdit) "编辑同步规则" else "新建同步规则", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(8.dp))
-
+                Text(if (isEdit) "编辑同步规则" else "新建同步规则", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = ruleName,
                 onValueChange = { ruleName = it },
@@ -265,18 +275,10 @@ fun SyncRuleConfigSheet(
                         }
                     }
                 }) { Text("保存") }
-                }
-
-                Spacer(
-                Modifier
-                    .fillMaxWidth()
-                    .height(hiddenTailHeight)
-                    .background(MaterialTheme.colorScheme.surface)
-                )
-                }
-                }
-                }
-                }
+            }
+        }
+    }
+}
 @Composable
 private fun ReadOnlyPathField(
     label: String,
