@@ -18,6 +18,9 @@ interface ServerProfileDao {
     @Query("SELECT * FROM server_profiles WHERE isActive = 1 LIMIT 1")
     suspend fun getActiveProfile(): ServerProfile?
 
+    @Query("SELECT * FROM server_profiles WHERE id = :id LIMIT 1")
+    suspend fun getProfileById(id: Long): ServerProfile?
+
     @Query("SELECT * FROM server_profiles")
     fun getAllProfilesFlow(): Flow<List<ServerProfile>>
 

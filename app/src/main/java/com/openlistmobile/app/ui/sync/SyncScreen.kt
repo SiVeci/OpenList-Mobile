@@ -63,9 +63,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.openlistmobile.app.data.local.SyncRule
 import com.openlistmobile.app.data.local.SyncStatus
 import com.openlistmobile.app.domain.sync.DiffReport
 import com.openlistmobile.app.ui.transfer.formatBytes
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -164,11 +168,19 @@ fun SyncScreen(
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when {
                 state.selectedRule == null -> EmptyHint("点击右上角 + 新建一个同步规则")
-                else -> DynamicSplitView(
-                    state = state,
-                    syncMode = state.selectedRule?.syncMode ?: com.openlistmobile.app.data.local.SyncMode.TWO_WAY,
-                    onToggleOrientation = { viewModel.toggleSplitOrientation() }
-                )
+                else -> Column(modifier = Modifier.fillMaxSize()) {
+                    RuleStatusPanel(
+                        rule = state.selectedRule,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)
+                    )
+                    Box(modifier = Modifier.weight(1f)) {
+                        DynamicSplitView(
+                            state = state,
+                            syncMode = state.selectedRule?.syncMode ?: com.openlistmobile.app.data.local.SyncMode.TWO_WAY,
+                            onToggleOrientation = { viewModel.toggleSplitOrientation() }
+                        )
+                    }
+                }
             }
         }
     }
@@ -216,6 +228,45 @@ fun SyncScreen(
                 TextButton(onClick = { ruleToDelete = null }) { Text("取消") }
             }
         )
+    }
+}
+
+@Composable
+private fun RuleStatusPanel(
+    rule: SyncRule?,
+    modifier: Modifier = Modifier
+) {
+    if (rule == null) return
+
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(
+                "自动同步状态",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "上次同步：${formatLastSyncTime(rule.lastSyncTime)}",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                "当前状态：${syncStatusLabel(rule.status)}",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            if (rule.status == SyncStatus.ERROR && !rule.errorMsg.isNullOrBlank()) {
+                Text(
+                    text = rule.errorMsg ?: "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
     }
 }
 
@@ -467,5 +518,20 @@ private fun SyncConfirmDialog(diff: DiffReport, onConfirm: (Boolean) -> Unit, on
 private fun EmptyHint(text: String) {
     Box(Modifier.fillMaxSize(), Alignment.Center) {
         Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private fun formatLastSyncTime(lastSyncTime: Long): String {
+    if (lastSyncTime <= 0L) return "从未同步"
+    val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+    return formatter.format(Date(lastSyncTime))
+}
+
+private fun syncStatusLabel(status: SyncStatus): String {
+    return when (status) {
+        SyncStatus.IDLE -> "空闲"
+        SyncStatus.DIFFING -> "比对中"
+        SyncStatus.SYNCING -> "同步中"
+        SyncStatus.ERROR -> "错误"
     }
 }

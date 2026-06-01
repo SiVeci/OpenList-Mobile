@@ -9,6 +9,7 @@ import androidx.documentfile.provider.DocumentFile
 import com.openlistmobile.app.data.local.SyncRule
 import com.openlistmobile.app.data.local.SyncRuleDao
 import com.openlistmobile.app.data.local.SyncStatus
+import com.openlistmobile.app.data.local.SyncTrigger
 import com.openlistmobile.app.data.local.TransferStatus
 import com.openlistmobile.app.data.local.TransferTask
 import com.openlistmobile.app.data.local.TransferType
@@ -22,8 +23,10 @@ import com.openlistmobile.app.domain.sync.DiffReport
 import com.openlistmobile.app.domain.sync.LocalNode
 import com.openlistmobile.app.domain.sync.RemoteNode
 import com.openlistmobile.app.service.TransferService
+import com.openlistmobile.app.utils.ProfileContextManager
 import com.openlistmobile.app.utils.RemoteLinkBuilder
 import com.openlistmobile.app.utils.TokenManager
+import com.openlistmobile.app.work.SyncWorkScheduler
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -36,6 +39,8 @@ class SyncRepositoryImpl @Inject constructor(
     private val fileRepository: FileRepository,
     private val transferRepository: TransferRepository,
     private val tokenManager: TokenManager,
+    private val profileContextManager: ProfileContextManager,
+    private val syncWorkScheduler: SyncWorkScheduler,
     @ApplicationContext private val context: Context
 ) : SyncRepository {
 
@@ -53,7 +58,9 @@ class SyncRepositoryImpl @Inject constructor(
             if (syncRuleDao.countByLocalUri(rule.localUri) > 0) {
                 return@withContext Result.failure(IllegalStateException("该本地目录已被其他规则绑定"))
             }
-            Result.success(syncRuleDao.insert(rule))
+            val id = syncRuleDao.insert(rule)
+            syncWorkScheduler.upsertRuleWork(rule.copy(id = id))
+            Result.success(id)
         } catch (e: SQLiteConstraintException) {
             Result.failure(IllegalStateException("该目录已被其他规则绑定"))
         } catch (e: Exception) {
@@ -63,11 +70,13 @@ class SyncRepositoryImpl @Inject constructor(
 
     override suspend fun deleteRule(id: Long) = withContext(Dispatchers.IO) {
         syncRuleDao.delete(id)
+        syncWorkScheduler.cancelRuleWork(id)
     }
 
     override suspend fun updateRule(rule: SyncRule): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             syncRuleDao.update(rule)
+            syncWorkScheduler.upsertRuleWork(rule)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -78,6 +87,44 @@ class SyncRepositoryImpl @Inject constructor(
         withContext(Dispatchers.IO) {
             syncRuleDao.updateStatus(id, status, errorMsg)
         }
+
+    override suspend fun runAutoSync(ruleId: Long): Result<Unit> = withContext(Dispatchers.IO) {
+        val rule = syncRuleDao.getRuleById(ruleId) ?: return@withContext Result.success(Unit)
+        if (rule.triggerType == SyncTrigger.MANUAL) return@withContext Result.success(Unit)
+
+        try {
+            profileContextManager.withProfile(rule.profileId) {
+                validateLocalAccess(rule)
+                syncRuleDao.updateStatus(rule.id, SyncStatus.DIFFING, null)
+
+                val diff = computeDiff(rule).getOrThrow()
+                if (rule.isMirrorDeleteEnabled) {
+                    executeMirrorDeletes(rule, diff).getOrThrow()
+                }
+
+                val taskIds = enqueueDiff(rule, diff)
+                if (taskIds.isNotEmpty()) {
+                    startTransferEngine()
+                }
+
+                syncRuleDao.updateSyncResult(
+                    id = rule.id,
+                    lastSyncTime = System.currentTimeMillis(),
+                    status = SyncStatus.IDLE,
+                    errorMsg = null
+                )
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            syncRuleDao.updateSyncResult(
+                id = rule.id,
+                lastSyncTime = rule.lastSyncTime,
+                status = SyncStatus.ERROR,
+                errorMsg = e.message ?: e::class.java.simpleName
+            )
+            Result.failure(e)
+        }
+    }
 
     override suspend fun loadBothSides(rule: SyncRule): Result<SideContents> = withContext(Dispatchers.IO) {
         try {
@@ -111,6 +158,7 @@ class SyncRepositoryImpl @Inject constructor(
                 parentDir.findFile(item.name)?.delete()
                 val target = parentDir.createFile("application/octet-stream", item.name) ?: continue
                 tasks += TransferTask(
+                    profileId = rule.profileId,
                     fileName = item.name,
                     fileUrl = url,
                     savePath = target.uri.toString(),
@@ -131,6 +179,7 @@ class SyncRepositoryImpl @Inject constructor(
             for (item in report.toUpload) {
                 val localUri = item.localUri ?: continue
                 tasks += TransferTask(
+                    profileId = rule.profileId,
                     fileName = item.name,
                     fileUrl = remoteParentPath(rule.remotePath, item.relativePath), // 云端目标父目录
                     savePath = localUri,
@@ -145,6 +194,21 @@ class SyncRepositoryImpl @Inject constructor(
         }
 
     /** 按相对路径在本地树逐层 findFile?:createDirectory 到文件的父目录，返回父目录。 */
+    private fun validateLocalAccess(rule: SyncRule) {
+        val uri = Uri.parse(rule.localUri)
+        val hasReadPermission = context.contentResolver.persistedUriPermissions.any {
+            it.uri == uri && it.isReadPermission
+        }
+        if (!hasReadPermission) {
+            throw IllegalStateException("Local folder permission is missing")
+        }
+
+        val root = DocumentFile.fromTreeUri(context, uri)
+        if (root == null || !root.exists() || !root.isDirectory) {
+            throw IllegalStateException("Local folder is unavailable")
+        }
+    }
+
     private fun ensureLocalParentDir(root: DocumentFile?, relativePath: String): DocumentFile? {
         if (root == null) return null
         val segments = relativePath.split("/").filter { it.isNotEmpty() }

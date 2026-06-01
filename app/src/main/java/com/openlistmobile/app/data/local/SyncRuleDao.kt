@@ -22,8 +22,19 @@ interface SyncRuleDao {
     @Query("SELECT * FROM sync_rules ORDER BY id ASC")
     fun getAllRulesFlow(): Flow<List<SyncRule>>
 
+    @Query("SELECT * FROM sync_rules ORDER BY id ASC")
+    suspend fun getAllRulesOnce(): List<SyncRule>
+
     @Query("SELECT * FROM sync_rules WHERE id = :id")
     suspend fun getRuleById(id: Long): SyncRule?
+
+    @Query("UPDATE sync_rules SET lastSyncTime = :lastSyncTime, status = :status, errorMsg = :errorMsg WHERE id = :id")
+    suspend fun updateSyncResult(
+        id: Long,
+        lastSyncTime: Long,
+        status: SyncStatus,
+        errorMsg: String? = null
+    )
 
     @Query("DELETE FROM sync_rules WHERE id = :id")
     suspend fun delete(id: Long)

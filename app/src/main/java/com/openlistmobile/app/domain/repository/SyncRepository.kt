@@ -21,6 +21,7 @@ interface SyncRepository {
     suspend fun updateRule(rule: SyncRule): Result<Unit>
     suspend fun deleteRule(id: Long)
     suspend fun updateRuleStatus(id: Long, status: SyncStatus, errorMsg: String? = null)
+    suspend fun runAutoSync(ruleId: Long): Result<Unit>
 
     /** 抓取两端单层目录内容（供双栏展示）。 */
     suspend fun loadBothSides(rule: SyncRule): Result<SideContents>

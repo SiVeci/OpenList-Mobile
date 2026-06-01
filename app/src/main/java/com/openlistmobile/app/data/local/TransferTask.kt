@@ -14,6 +14,7 @@ enum class TransferType {
 @Entity(tableName = "transfer_tasks")
 data class TransferTask(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val profileId: Long = -1L,
     val fileName: String,
     val fileUrl: String,
     val savePath: String,

@@ -69,6 +69,8 @@ dependencies {
     implementation("com.google.dagger:hilt-android:2.51.1")
     ksp("com.google.dagger:hilt-compiler:2.51.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
 
     // Retrofit & OkHttp
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
@@ -113,6 +115,9 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
+
+    // WorkManager
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
     
     // DocumentFile for SAF
     implementation("androidx.documentfile:documentfile:1.0.1")

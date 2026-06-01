@@ -13,9 +13,11 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.openlistmobile.app.MainActivity
 import com.openlistmobile.app.data.local.TransferStatus
+import com.openlistmobile.app.data.local.TransferTask
 import com.openlistmobile.app.data.local.TransferTaskDao
 import com.openlistmobile.app.data.local.TransferType
 import com.openlistmobile.app.data.remote.ProgressRequestBody
+import com.openlistmobile.app.utils.ProfileContextManager
 import com.openlistmobile.app.utils.TokenManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
@@ -37,6 +39,9 @@ class TransferService : Service() {
 
     @Inject
     lateinit var tokenManager: TokenManager
+
+    @Inject
+    lateinit var profileContextManager: ProfileContextManager
 
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
@@ -106,6 +111,9 @@ class TransferService : Service() {
                     if (nextTask == null) {
                         break
                     }
+                    if (!ensureTaskProfile(nextTask)) {
+                        continue
+                    }
                     if (nextTask.type == TransferType.DOWNLOAD) {
                         downloadFile(nextTask.id)
                     } else {
@@ -118,6 +126,22 @@ class TransferService : Service() {
                 stopSelf()
             }
         }
+    }
+
+    private suspend fun ensureTaskProfile(task: TransferTask): Boolean {
+        if (task.profileId <= 0L) return true
+
+        val result = profileContextManager.applyProfile(task.profileId)
+        if (result.isFailure) {
+            transferTaskDao.update(
+                task.copy(
+                    status = TransferStatus.ERROR,
+                    errorMsg = result.exceptionOrNull()?.message ?: "Unable to restore profile"
+                )
+            )
+            return false
+        }
+        return true
     }
 
     private suspend fun downloadFile(taskId: Long) {
@@ -221,62 +245,71 @@ class TransferService : Service() {
 
         try {
             val uri = Uri.parse(task.savePath)
-            val inputStream = contentResolver.openInputStream(uri) ?: throw Exception("Could not open input stream")
-            
             val baseUrl = tokenManager.currentServerUrl ?: throw Exception("No active server")
-            val token = tokenManager.currentToken ?: throw Exception("No token")
+            tokenManager.currentToken ?: throw Exception("No token")
             
             // task.fileUrl here contains the target path
             val targetPath = if (task.fileUrl.endsWith("/")) "${task.fileUrl}${task.fileName}" else "${task.fileUrl}/${task.fileName}"
             val encodedPath = java.net.URLEncoder.encode(targetPath, "UTF-8").replace("+", "%20")
             val url = "$baseUrl/api/fs/put"
 
-            // Fix for Content-Length: If totalBytes is invalid, try to get actual size
-            var actualTotalBytes = task.totalBytes
-            if (actualTotalBytes <= 0) {
-                try {
-                    actualTotalBytes = contentResolver.openAssetFileDescriptor(uri, "r")?.length ?: inputStream.available().toLong()
-                    // Update task with correct size
-                    if (actualTotalBytes > 0) {
-                        task = task.copy(totalBytes = actualTotalBytes)
-                        transferTaskDao.update(task)
-                    }
-                } catch (e: Exception) {
-                    // Ignore, fallback to original size
-                }
-            }
-
-            val requestBody = ProgressRequestBody(
-                inputStream = inputStream,
-                contentLength = actualTotalBytes,
-                onProgress = { bytesWritten ->
-                    if (!serviceScope.isActive) return@ProgressRequestBody
-                    serviceScope.launch {
-                        task = task.copy(downloadedBytes = bytesWritten)
-                        transferTaskDao.update(task)
-                        updateNotification("Uploading: ${task.fileName}", bytesWritten, task.totalBytes)
+            contentResolver.openInputStream(uri)?.use { inputStream ->
+                // Fix for Content-Length: If totalBytes is invalid, try to get actual size
+                var actualTotalBytes = task.totalBytes
+                if (actualTotalBytes <= 0) {
+                    try {
+                        actualTotalBytes = contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+                            ?: inputStream.available().toLong()
+                        // Update task with correct size
+                        if (actualTotalBytes > 0) {
+                            task = task.copy(totalBytes = actualTotalBytes)
+                            transferTaskDao.update(task)
+                        }
+                    } catch (e: Exception) {
+                        // Ignore, fallback to original size
                     }
                 }
-            )
 
-            val request = Request.Builder()
-                .url(url)
-                // Removed duplicate Authorization header, as NetworkModule already provides an interceptor
-                .addHeader("File-Path", encodedPath)
-                .put(requestBody)
-                .build()
+                val requestBody = ProgressRequestBody(
+                    inputStream = inputStream,
+                    contentLength = actualTotalBytes,
+                    onProgress = { bytesWritten ->
+                        if (!serviceScope.isActive) return@ProgressRequestBody
+                        serviceScope.launch {
+                            task = task.copy(downloadedBytes = bytesWritten)
+                            transferTaskDao.update(task)
+                            updateNotification("Uploading: ${task.fileName}", bytesWritten, task.totalBytes)
+                        }
+                    }
+                )
 
-            val response = withContext(Dispatchers.IO) {
-                okHttpClient.newCall(request).execute()
-            }
+                val request = Request.Builder()
+                    .url(url)
+                    // Removed duplicate Authorization header, as NetworkModule already provides an interceptor
+                    .addHeader("File-Path", encodedPath)
+                    .addHeader("Connection", "close")
+                    .put(requestBody)
+                    .build()
 
-            if (!response.isSuccessful) {
-                throw Exception("HTTP ${response.code}: ${response.message}")
-            }
+                val response = withContext(Dispatchers.IO) {
+                    okHttpClient.newCall(request).execute()
+                }
 
-            transferTaskDao.update(task.copy(status = TransferStatus.SUCCESS))
-            updateNotification("Upload complete: ${task.fileName}", 100, 100)
-            delay(1000)
+                response.use {
+                    if (!it.isSuccessful) {
+                        throw Exception("HTTP ${it.code}: ${it.message}")
+                    }
+                }
+
+                transferTaskDao.update(
+                    task.copy(
+                        downloadedBytes = if (actualTotalBytes > 0) actualTotalBytes else task.downloadedBytes,
+                        status = TransferStatus.SUCCESS
+                    )
+                )
+                updateNotification("Upload complete: ${task.fileName}", 100, 100)
+                delay(1000)
+            } ?: throw Exception("Could not open input stream")
 
         } catch (e: CancellationException) {
              // Task was cancelled

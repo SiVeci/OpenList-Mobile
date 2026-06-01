@@ -20,9 +20,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.LocalOverscrollConfiguration
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -51,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import com.openlistmobile.app.data.local.ConflictStrategy
 import com.openlistmobile.app.data.local.SyncMode
 import com.openlistmobile.app.data.local.SyncRule
+import com.openlistmobile.app.data.local.SyncTrigger
 import com.openlistmobile.app.ui.components.clearFocusOnTap
 
 @Suppress("DEPRECATION")
@@ -77,7 +83,11 @@ fun SyncRuleConfigSheet(
         )
     }
     var ignoreTime by remember { mutableStateOf(existingRule?.ignoreModifiedTime ?: false) }
+    var triggerType by remember { mutableStateOf(existingRule?.triggerType ?: SyncTrigger.MANUAL) }
+    var requiresWiFi by remember { mutableStateOf(existingRule?.requiresWiFi ?: true) }
+    var requiresCharging by remember { mutableStateOf(existingRule?.requiresCharging ?: false) }
     var showCloudPicker by remember { mutableStateOf(false) }
+    var showTriggerMenu by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -262,12 +272,61 @@ fun SyncRuleConfigSheet(
                     )
                 }
 
-                Text(
-                    "定时自动同步与网络约束本期暂未启用。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp)
+
+                Spacer(Modifier.height(8.dp))
+                Text("自动同步", style = MaterialTheme.typography.titleSmall)
+                TriggerTypeField(
+                    selected = triggerType,
+                    expanded = showTriggerMenu,
+                    onExpandedChange = { showTriggerMenu = it },
+                    onSelect = {
+                        triggerType = it
+                        showTriggerMenu = false
+                    }
                 )
+
+                if (triggerType != SyncTrigger.MANUAL) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(
+                            checked = requiresWiFi,
+                            onCheckedChange = { requiresWiFi = it },
+                            modifier = Modifier.scale(0.8f)
+                        )
+                        Text(
+                            "仅在 Wi-Fi 下自动同步",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(
+                            checked = requiresCharging,
+                            onCheckedChange = { requiresCharging = it },
+                            modifier = Modifier.scale(0.8f)
+                        )
+                        Text(
+                            "仅在充电时自动同步",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    }
+                } else {
+                    Text(
+                        "当前为手动同步模式，不会创建后台定时任务。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
+                if (mirrorDelete && syncMode != SyncMode.TWO_WAY && triggerType != SyncTrigger.MANUAL) {
+                    Text(
+                        "警告：自动同步会静默删除多余文件。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
 
                 errorMsg?.let {
                     Text(
@@ -295,7 +354,10 @@ fun SyncRuleConfigSheet(
                                     syncMode = syncMode,
                                     isMirrorDeleteEnabled = mirrorDelete && syncMode != SyncMode.TWO_WAY,
                                     conflictStrategy = conflictStrategy,
-                                    ignoreModifiedTime = ignoreTime
+                                    ignoreModifiedTime = ignoreTime,
+                                    triggerType = triggerType,
+                                    requiresWiFi = requiresWiFi,
+                                    requiresCharging = requiresCharging
                                 )
                                 onUpdate(updated) { result ->
                                     result.fold(
@@ -314,7 +376,10 @@ fun SyncRuleConfigSheet(
                                     syncMode = syncMode,
                                     isMirrorDeleteEnabled = mirrorDelete && syncMode != SyncMode.TWO_WAY,
                                     conflictStrategy = conflictStrategy,
-                                    ignoreModifiedTime = ignoreTime
+                                    ignoreModifiedTime = ignoreTime,
+                                    triggerType = triggerType,
+                                    requiresWiFi = requiresWiFi,
+                                    requiresCharging = requiresCharging
                                 )
                                 onCreate(rule) { result ->
                                     result.fold(
@@ -330,6 +395,62 @@ fun SyncRuleConfigSheet(
         }
     }
 }
+private fun triggerLabel(trigger: SyncTrigger): String {
+    return when (trigger) {
+        SyncTrigger.MANUAL -> "手动同步"
+        SyncTrigger.PERIODIC_6H -> "每 6 小时"
+        SyncTrigger.PERIODIC_12H -> "每 12 小时"
+        SyncTrigger.PERIODIC_24H -> "每 24 小时"
+    }
+}
+
+@Composable
+private fun TriggerTypeField(
+    selected: SyncTrigger,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onSelect: (SyncTrigger) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        Text(
+            "触发频率",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = MaterialTheme.shapes.small,
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp).clickable { onExpandedChange(true) }
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = triggerLabel(selected),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = "选择触发频率"
+                )
+            }
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) }
+        ) {
+            SyncTrigger.entries.forEach { trigger ->
+                DropdownMenuItem(
+                    text = { Text(triggerLabel(trigger)) },
+                    onClick = { onSelect(trigger) }
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun ReadOnlyPathField(
     label: String,

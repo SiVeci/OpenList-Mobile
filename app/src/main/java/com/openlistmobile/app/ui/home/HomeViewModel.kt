@@ -7,6 +7,8 @@ import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.openlistmobile.app.data.local.SyncRuleDao
+import com.openlistmobile.app.data.local.SyncTrigger
 import com.openlistmobile.app.data.local.ServerProfile
 import com.openlistmobile.app.data.remote.model.AListFile
 import com.openlistmobile.app.data.remote.model.SearchResultItem
@@ -18,6 +20,7 @@ import com.openlistmobile.app.data.local.TransferType
 import com.openlistmobile.app.utils.RemoteLinkBuilder
 import com.openlistmobile.app.utils.ShareManager
 import com.openlistmobile.app.utils.SettingsManager
+import com.openlistmobile.app.work.SyncWorkScheduler
 import android.net.Uri
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -121,6 +124,8 @@ class HomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val fileRepository: FileRepository,
     private val transferRepository: TransferRepository,
+    private val syncRuleDao: SyncRuleDao,
+    private val syncWorkScheduler: SyncWorkScheduler,
     val shareManager: ShareManager,
     private val settingsManager: SettingsManager
 ) : ViewModel() {
@@ -154,6 +159,8 @@ class HomeViewModel @Inject constructor(
             _uiState.update { it.copy(customDownloadDirPath = getReadablePathFromUri(savedUri)) }
         }
 
+        reconcileAutoSyncWork()
+
         viewModelScope.launch {
             authRepository.initActiveProfile()
             authRepository.getAllProfiles().collect { profiles ->
@@ -170,6 +177,16 @@ class HomeViewModel @Inject constructor(
                     fetchFiles("/", isRefresh = false)
                 }
             }
+        }
+    }
+
+    private fun reconcileAutoSyncWork() {
+        viewModelScope.launch {
+            syncRuleDao.getAllRulesOnce()
+                .filter { it.triggerType != SyncTrigger.MANUAL }
+                .forEach { rule ->
+                    syncWorkScheduler.upsertRuleWork(rule)
+                }
         }
     }
 
