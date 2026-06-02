@@ -136,36 +136,60 @@ fun HomeScreen(
         },
         floatingActionButton = {
             if (uiState.profiles.isNotEmpty() && uiState.currentProfile != null) {
-                val interactionSource = remember { MutableInteractionSource() }
-                val isPressed by interactionSource.collectIsPressedAsState()
-                val scale by animateFloatAsState(
-                    targetValue = if (isPressed) 0.9f else 1f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
-                    ),
-                    label = "FabScale"
-                )
-
-                // Large Purple Upload FAB
-                FloatingActionButton(
-                    onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White,
-                    shape = RoundedCornerShape(20.dp),
-                    interactionSource = interactionSource,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .graphicsLayer {
-                            scaleX = scale
-                            scaleY = scale
-                        }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CloudUpload,
-                        contentDescription = "Upload File",
-                        modifier = Modifier.size(32.dp)
+                Box {
+                    var showFabMenu by remember { mutableStateOf(false) }
+                    val interactionSource = remember { MutableInteractionSource() }
+                    val isPressed by interactionSource.collectIsPressedAsState()
+                    val scale by animateFloatAsState(
+                        targetValue = if (isPressed) 0.9f else 1f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow
+                        ),
+                        label = "FabScale"
                     )
+
+                    FloatingActionButton(
+                        onClick = { showFabMenu = true },
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = Color.White,
+                        shape = RoundedCornerShape(20.dp),
+                        interactionSource = interactionSource,
+                        modifier = Modifier
+                            .size(64.dp)
+                            .graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                            }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Actions",
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showFabMenu,
+                        onDismissRequest = { showFabMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("新建文件夹") },
+                            leadingIcon = { Icon(Icons.Default.CreateNewFolder, null) },
+                            onClick = {
+                                showFabMenu = false
+                                viewModel.openCreateFolderDialog()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("上传文件") },
+                            leadingIcon = { Icon(Icons.Default.CloudUpload, null) },
+                            onClick = {
+                                showFabMenu = false
+                                filePickerLauncher.launch(arrayOf("*/*"))
+                            }
+                        )
+                    }
                 }
             }
         },
@@ -398,6 +422,47 @@ fun HomeScreen(
                 }
             )
         }
+    }
+
+    if (uiState.showCreateFolderDialog) {
+        var folderName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { viewModel.closeCreateFolderDialog() },
+            title = { Text("新建文件夹") },
+            text = {
+                Column(modifier = Modifier.clearFocusOnTap()) {
+                    OutlinedTextField(
+                        value = folderName,
+                        onValueChange = { folderName = it },
+                        label = { Text("文件夹名称") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        focusManager.clearFocus(force = true)
+                        if (folderName.isNotBlank()) {
+                            viewModel.createFolder(folderName.trim())
+                            viewModel.closeCreateFolderDialog()
+                        }
+                    }
+                ) {
+                    Text("创建")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        focusManager.clearFocus(force = true)
+                        viewModel.closeCreateFolderDialog()
+                    }
+                ) {
+                    Text("取消")
+                }
+            }
+        )
     }
 
     if (uiState.showMoveDirPicker) {

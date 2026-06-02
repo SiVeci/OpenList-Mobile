@@ -116,7 +116,9 @@ data class HomeUiState(
     val renameTarget: AListFile? = null,
     val showMoveDirPicker: Boolean = false,
     val isCopyOperation: Boolean = false,
-    val isMovingOrCopying: Boolean = false
+    val isMovingOrCopying: Boolean = false,
+
+    val showCreateFolderDialog: Boolean = false
 )
 
 @HiltViewModel
@@ -434,6 +436,14 @@ class HomeViewModel @Inject constructor(
 
     fun closeRenameDialog() {
         _uiState.update { it.copy(showRenameDialog = false, renameTarget = null) }
+    }
+
+    fun openCreateFolderDialog() {
+        _uiState.update { it.copy(showCreateFolderDialog = true) }
+    }
+
+    fun closeCreateFolderDialog() {
+        _uiState.update { it.copy(showCreateFolderDialog = false) }
     }
 
     fun renameFile(newName: String, context: android.content.Context) {
