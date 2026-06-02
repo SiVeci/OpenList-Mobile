@@ -200,7 +200,7 @@ class AListDocumentsProvider : DocumentsProvider() {
 
     /**
      * 获取带签名的文件 URL，用于防盗链适配
-     * 优先使用服务器返回的 raw_url，降级使用 sign 构建 URL
+     * 使用 sign 通过 RemoteLinkBuilder 构建 URL，确保保留端口号
      */
     private suspend fun getSignedUrl(documentId: String): String {
         val baseUrl = entryPoint.tokenManager().currentServerUrl ?: ""
@@ -211,11 +211,7 @@ class AListDocumentsProvider : DocumentsProvider() {
             val response = entryPoint.apiService().getFileInfo(url, request)
             if (response.code == 200 && response.data != null) {
                 val fileInfo = response.data
-                // 优先使用 raw_url（服务器完整 URL，可能包含额外签名参数）
-                if (fileInfo.raw_url.isNotBlank()) {
-                    return fileInfo.raw_url
-                }
-                // 降级使用 sign 构建 URL
+                // 使用 sign 构建 URL（保留端口号）
                 return RemoteLinkBuilder.build(baseUrl, documentId, fileInfo.sign)
             }
             // API 返回失败，降级使用无签名 URL
