@@ -26,6 +26,7 @@ import okhttp3.Request
 import okhttp3.RequestBody
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -46,6 +47,12 @@ class TransferService : Service() {
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
     private var activeJob: Job? = null
+
+    // 性能优化：内存缓存 + 降频落盘
+    private val progressCache = ConcurrentHashMap<Long, TransferTask>()
+    private val lastPersistTime = ConcurrentHashMap<Long, Long>()
+    private val lastPersistedBytes = ConcurrentHashMap<Long, Long>()
+    private var dbWriteCount = 0
     
     companion object {
         const val CHANNEL_ID = "transfer_channel"
@@ -60,6 +67,42 @@ class TransferService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+    }
+
+    /**
+     * 判断是否需要将进度落盘持久化
+     * 满足任一条件即返回 true：
+     * 1. 距上次写入 ≥ 5秒
+     * 2. 进度变化 ≥ 5%
+     * 3. 状态发生变更
+     */
+    private fun shouldPersist(task: TransferTask): Boolean {
+        val now = System.currentTimeMillis()
+        val lastTime = lastPersistTime[task.id] ?: 0L
+        val lastBytes = lastPersistedBytes[task.id] ?: 0L
+        val cachedTask = progressCache[task.id]
+
+        val timeElapsed = now - lastTime >= 5000L
+        val progressChanged = task.totalBytes > 0 &&
+            (task.downloadedBytes - lastBytes) * 100 / task.totalBytes >= 5
+        val statusChanged = cachedTask == null || cachedTask.status != task.status
+
+        return timeElapsed || progressChanged || statusChanged
+    }
+
+    /**
+     * 内存缓存 + 条件落盘
+     * 始终更新内存缓存，仅在满足条件时写入数据库
+     */
+    private suspend fun persistIfNeeded(task: TransferTask) {
+        progressCache[task.id] = task
+        if (shouldPersist(task)) {
+            dbWriteCount++
+            android.util.Log.d("TransferPerf", "DB Write #$dbWriteCount for ${task.fileName}, progress: ${task.downloadedBytes}/${task.totalBytes}")
+            transferTaskDao.update(task)
+            lastPersistTime[task.id] = System.currentTimeMillis()
+            lastPersistedBytes[task.id] = task.downloadedBytes
+        }
     }
 
     private var isWorkerRunning = false
@@ -216,7 +259,7 @@ class TransferService : Service() {
                         val now = System.currentTimeMillis()
                         if (now - lastUpdateTime > 500) {
                             lastUpdateTime = now
-                            transferTaskDao.update(currentTask)
+                            persistIfNeeded(currentTask)
                             updateNotification("Downloading: ${currentTask.fileName}", currentTask.downloadedBytes, currentTask.totalBytes)
                         }
                     }
@@ -277,7 +320,7 @@ class TransferService : Service() {
                         if (!serviceScope.isActive) return@ProgressRequestBody
                         serviceScope.launch {
                             task = task.copy(downloadedBytes = bytesWritten)
-                            transferTaskDao.update(task)
+                            persistIfNeeded(task)
                             updateNotification("Uploading: ${task.fileName}", bytesWritten, task.totalBytes)
                         }
                     }
