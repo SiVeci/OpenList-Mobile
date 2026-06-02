@@ -10,6 +10,7 @@ import android.webkit.MimeTypeMap
 import com.openlistmobile.app.data.remote.AListApiService
 import com.openlistmobile.app.data.remote.model.FileListRequest
 import com.openlistmobile.app.domain.repository.AuthRepository
+import com.openlistmobile.app.utils.RemoteLinkBuilder
 import com.openlistmobile.app.utils.TokenManager
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -163,7 +164,7 @@ class AListDocumentsProvider : DocumentsProvider() {
         signal: CancellationSignal?
     ): ParcelFileDescriptor {
         // 由于是网络存储映射到本地文件，我们采用管道 Pipe 将网络流写入，供系统文件管理器读取
-        val url = buildDownloadUrl(documentId)
+        val url = runBlocking { getSignedUrl(documentId) }
         val request = Request.Builder().url(url).build()
 
         val pfd = ParcelFileDescriptor.createReliablePipe()
@@ -195,6 +196,34 @@ class AListDocumentsProvider : DocumentsProvider() {
         // 此处为标准公开直连示例：
         val baseUrl = entryPoint.tokenManager().currentServerUrl ?: ""
         return "$baseUrl/d$documentId"
+    }
+
+    /**
+     * 获取带签名的文件 URL，用于防盗链适配
+     * 优先使用服务器返回的 raw_url，降级使用 sign 构建 URL
+     */
+    private suspend fun getSignedUrl(documentId: String): String {
+        val baseUrl = entryPoint.tokenManager().currentServerUrl ?: ""
+        val url = "$baseUrl/api/fs/get"
+        val request = FileListRequest(path = documentId)
+        
+        return try {
+            val response = entryPoint.apiService().getFileInfo(url, request)
+            if (response.code == 200 && response.data != null) {
+                val fileInfo = response.data
+                // 优先使用 raw_url（服务器完整 URL，可能包含额外签名参数）
+                if (fileInfo.raw_url.isNotBlank()) {
+                    return fileInfo.raw_url
+                }
+                // 降级使用 sign 构建 URL
+                return RemoteLinkBuilder.build(baseUrl, documentId, fileInfo.sign)
+            }
+            // API 返回失败，降级使用无签名 URL
+            buildDownloadUrl(documentId)
+        } catch (e: Exception) {
+            // 异常降级：使用无签名 URL
+            buildDownloadUrl(documentId)
+        }
     }
 
     private fun getMimeType(name: String): String {
