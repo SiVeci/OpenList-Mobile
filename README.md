@@ -2,7 +2,7 @@
   <img src="app/src/main/res/mipmap-xxhdpi/ic_launcher.webp" width="100" />
   <h1>OpenList Mobile</h1>
   <p>
-    <img src="https://img.shields.io/badge/Version-v1.4.0-blue" alt="Version">
+    <img src="https://img.shields.io/badge/Version-v1.4.1-blue" alt="Version">
     <img src="https://img.shields.io/badge/Platform-Android%208.0%2B-brightgreen" alt="Platform">
     <img src="https://img.shields.io/badge/Language-Kotlin%201.9.23-blue" alt="Language">
     <img src="https://img.shields.io/badge/Framework-Compose%20%7C%20Hilt-orange" alt="Framework">
@@ -114,8 +114,8 @@ OpenList Mobile 是一款基于 Android 平台开发的 AList 客户端应用。
 ## 待办事项 (TODO / Roadmap)
 
 ### 性能与稳定性优化
-- [ ] **SAF DocumentsProvider 防盗链适配**: 优化 `AListDocumentsProvider` 中的文件流获取逻辑。摒弃硬编码直连，改为调用服务端 `/api/fs/get` 接口获取带有签名的临时直链，确保访问受密码保护或开启了防盗链验证的目录时不会遭遇 403 权限拒绝。
-- [ ] **TransferService 性能优化与内存防抖**: 降低大文件传输过程中对 Room 数据库（SQLite）的高频写操作（当前约每半秒一次）。引入 `MutableStateFlow` 在内存层维护 UI 进度，采用降频或基于状态变更的策略落盘持久化，避免不必要的 I/O 损耗与 Compose 重组卡顿。
+- [x] ~~**SAF DocumentsProvider 防盗链适配**: 优化 `AListDocumentsProvider` 中的文件流获取逻辑。摒弃硬编码直连，改为调用服务端 `/api/fs/get` 接口获取带有签名的临时直链，确保访问受密码保护或开启了防盗链验证的目录时不会遭遇 403 权限拒绝。~~
+- [x] ~~**TransferService 性能优化与内存防抖**: 降低大文件传输过程中对 Room 数据库（SQLite）的高频写操作（当前约每半秒一次）。引入 `MutableStateFlow` 在内存层维护 UI 进度，采用降频或基于状态变更的策略落盘持久化，避免不必要的 I/O 损耗与 Compose 重组卡顿。~~
 
 ### 核心功能迭代
 - [x] ~~**内置媒体播放中心**: 集成 `androidx.media3:media3-exoplayer`，实现端内的流媒体视频播放及后台音乐音频播放，彻底解决调用外部播放器时的鉴权失败问题。~~
